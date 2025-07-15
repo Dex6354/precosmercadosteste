@@ -294,7 +294,7 @@ def buscar_nagumo(term="banana"):
         return []
 
 # Configuração da página
-st.set_page_config(page_title="Comparador de Preços", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
 st.markdown("""
     <style>
@@ -367,9 +367,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 Comparador de Preços Shibata e Nagumo")
+st.markdown("<h5>🛒 Preços Mercados</h5>", unsafe_allow_html=True)
 
-termo = st.text_input("Digite o nome do produto para pesquisar:", "").strip().lower()
+termo = st.text_input("🔎 Digite o nome do produto:", "").strip().lower()
 
 if termo:
     # Cria as duas colunas principais
@@ -560,7 +560,7 @@ if termo:
             else:
                 preco_html = f"R$ {preco:.2f}"
             st.markdown(f"""
-                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap;">
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
                         <img src="{imagem}" width="80" style="border-radius:8px;">
                     </div>
