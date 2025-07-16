@@ -378,13 +378,21 @@ st.markdown("""
 input[type="text"] {
     font-size: 0.8rem !important;
 }
-
+/* Tamanho do espaco no final da pagina */
+.block-container {
+    padding-bottom: 15px !important;
+    margin-bottom: 15px !important;
+}
+/* Tamanho do espaco entre colunas */
+[data-testid="stColumn"] {
+margin-bottom: 20px;
+}
     </style>
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
 
-termo = st.text_input("🔎 Digite o nome do produto:", "").strip().lower()
+termo = st.text_input("🔎 Digite o nome do produto:", "banana").strip().lower()
 
 
 if termo:
