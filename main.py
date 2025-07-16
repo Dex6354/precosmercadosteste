@@ -336,7 +336,7 @@ st.markdown("""
 
        [data-testid="stColumn"] {
     overflow-y: auto;
-    max-height: 70vh;
+    max-height: 90vh;
     padding: 10px;
     border: 1px solid #f0f2f6;
     border-radius: 8px;
@@ -371,7 +371,7 @@ st.markdown("""
 /* Estilos para barra de rolagem data-testid="stColumn" (fim) */
 
 .block-container {
-    padding-right: 50px !important;  /* Tamanho do espaco para rolagem */
+    padding-right: 47px !important;  /* Tamanho do espaco para rolagem */
 }
 
         /* Reduz o tamanho da fonte da caixa de pesquisa */
@@ -486,7 +486,7 @@ if termo:
         with col1:
                 st.markdown(f"""
                     <h5 style="display: flex; align-items: center; justify-content: center;">
-                    <img src="https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png" width="60" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+                    <img src="https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
                     Shibata
                     </h5>
                 """, unsafe_allow_html=True)
@@ -553,7 +553,7 @@ if termo:
     with col2:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="https://institucional.nagumo.com.br/images/nagumo-2000.png" width="60" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
+                <img src="https://institucional.nagumo.com.br/images/nagumo-2000.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
                 Nagumo
             </h5>
         """, unsafe_allow_html=True)
