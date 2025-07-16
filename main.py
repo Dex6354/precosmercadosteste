@@ -392,7 +392,7 @@ margin-bottom: 20px;
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
 
-termo = st.text_input("🔎 Digite o nome do produto:", "banana").strip().lower()
+termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip().lower()
 
 
 if termo:
