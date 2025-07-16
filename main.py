@@ -301,7 +301,7 @@ st.markdown("""
         .block-container { padding-top: 0rem; }
         footer {visibility: hidden;}
         #MainMenu {visibility: hidden;}
-        div, span, strong, small { font-size: 0.85rem !important; }
+        div, span, strong, small { font-size: 0.75rem !important; }
         img { max-width: 100px; height: auto; }
         .product-container {
             display: flex;
@@ -364,6 +364,11 @@ st.markdown("""
         [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
             background: #555;
         }
+        /* Reduz o tamanho da fonte da caixa de pesquisa */
+input[type="text"] {
+    font-size: 0.8rem !important;
+}
+
     </style>
 """, unsafe_allow_html=True)
 
