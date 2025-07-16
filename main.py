@@ -490,9 +490,9 @@ if termo:
                     Shibata
                     </h5>
                 """, unsafe_allow_html=True)
-                st.markdown(f"<small>🔎 {len(produtos_shibata_ordenados)} produto(s) encontrado(s) no Shibata.</small>", unsafe_allow_html=True)
+                st.markdown(f"<small>🔎 {len(produtos_shibata_ordenados)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
                 if not produtos_shibata_ordenados:
-                    st.warning("Nenhum produto encontrado no Shibata.")
+                    st.warning("Nenhum produto encontrado.")
                 for p in produtos_shibata_ordenados:
                     preco = float(p.get('preco') or 0)
                     descricao = p.get('descricao', '')
@@ -557,9 +557,9 @@ if termo:
                 Nagumo
             </h5>
         """, unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(produtos_nagumo_ordenados)} produto(s) encontrado(s) no Nagumo.</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(produtos_nagumo_ordenados)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
         if not produtos_nagumo_ordenados:
-            st.warning("Nenhum produto encontrado no Nagumo.")
+            st.warning("Nenhum produto encontrado.")
         for p in produtos_nagumo_ordenados:
             imagem = p['photosUrl'][0] if p.get('photosUrl') else ""
             preco_unitario = p['preco_unitario_str']
