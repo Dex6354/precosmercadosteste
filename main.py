@@ -367,7 +367,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h5>🛒 Preços Mercados</h5>", unsafe_allow_html=True)
+st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
 
 termo = st.text_input("🔎 Digite o nome do produto:", "").strip().lower()
 
