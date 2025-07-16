@@ -307,7 +307,6 @@ st.markdown("""
             display: flex;
             align-items: center;
             gap: 10px;
-            flex-wrap: nowrap;
         }
         .product-image {
             min-width: 80px;
@@ -318,8 +317,10 @@ st.markdown("""
             border-radius: 8px;
         }
         .product-info {
-            flex-grow: 1;
-            min-width: 150px;
+    flex: 1 1 auto;
+    min-width: 0; /* 👈 ESSENCIAL para permitir quebra */
+    word-break: break-word;
+    overflow-wrap: break-word;
         }
         hr.product-separator {
             border: none;
@@ -330,40 +331,49 @@ st.markdown("""
             color: gray;
             font-size: 0.8rem;
         }
-        /* Estilos para as colunas do Streamlit */
+        /* Estilos para barra de rolagem data-testid="stColumn" (inicio) */
 
 
-        [data-testid="stColumn"] {
+       [data-testid="stColumn"] {
     overflow-y: auto;
     max-height: 70vh;
     padding: 10px;
     border: 1px solid #f0f2f6;
     border-radius: 8px;
-    max-width: 480px;  /* largura máxima reduzida */
+    max-width: 480px;
     margin-left: auto;
     margin-right: auto;
+    background: transparent;
+    scrollbar-width: thin;
+    scrollbar-color: gray transparent;  /* Firefox: thumb branco, track transparente */
 }
 
+/* WebKit (Chrome, Safari, Edge) */
+[data-testid="stColumn"]::-webkit-scrollbar {
+    width: 6px;
+    background: transparent;
+}
+
+[data-testid="stColumn"]::-webkit-scrollbar-track {
+    background: transparent; /* fundo transparente */
+}
+
+[data-testid="stColumn"]::-webkit-scrollbar-thumb {
+    background-color: gray; /* barrinha branca translúcida */
+    border-radius: 3px;
+    border: 1px solid transparent;
+}
+
+[data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
+    background-color: white; /* barrinha mais visível ao passar o mouse */
+}
+
+/* Estilos para barra de rolagem data-testid="stColumn" (fim) */
 
 .block-container {
-    padding-right: 70px !important;
+    padding-right: 50px !important;  /* Tamanho do espaco para rolagem */
 }
 
-        /* Estiliza a barra de rolagem (WebKit/Chrome/Safari) */
-        [data-testid="stColumn"]::-webkit-scrollbar {
-            width: 8px;
-        }
-        [data-testid="stColumn"]::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 10px;
-        }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
-            background: #555;
-        }
         /* Reduz o tamanho da fonte da caixa de pesquisa */
 input[type="text"] {
     font-size: 0.8rem !important;
@@ -375,6 +385,7 @@ input[type="text"] {
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
 
 termo = st.text_input("🔎 Digite o nome do produto:", "").strip().lower()
+
 
 if termo:
     # Cria as duas colunas principais
@@ -471,69 +482,72 @@ if termo:
         produtos_nagumo_ordenados = sorted(produtos_nagumo_filtrados, key=lambda x: x['preco_unitario_valor'])
 
     # Exibição dos resultados na COLUNA 1 (Shibata)
-    with col1:
-        st.markdown(f"""
-            <h5 style="display: flex; align-items: center; justify-content: center;">
-            <img src="https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png" width="60" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
-            Shibata
-            </h5>
-        """, unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(produtos_shibata_ordenados)} produto(s) encontrado(s) no Shibata.</small>", unsafe_allow_html=True)
-        if not produtos_shibata_ordenados:
-            st.warning("Nenhum produto encontrado no Shibata.")
-        for p in produtos_shibata_ordenados:
-            preco = float(p.get('preco') or 0)
-            descricao = p.get('descricao', '')
-            imagem = p.get('imagem', '')
-            em_oferta = p.get('em_oferta', False)
-            oferta_info = p.get('oferta') or {}
-            preco_oferta = oferta_info.get('preco_oferta')
-            preco_antigo = oferta_info.get('preco_antigo')
-            imagem_url = f"https://produtos.vipcommerce.com.br/250x250/{imagem}"
-            preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
-            quantidade_dif = p.get('quantidade_unidade_diferente')
-            unidade_sigla = p.get('unidade_sigla')
-            preco_formatado = formatar_preco_unidade_personalizado(preco_total, quantidade_dif, unidade_sigla)
-            if em_oferta and preco_oferta and preco_antigo:
-                preco_oferta_val = float(preco_oferta)
-                preco_antigo_val = float(preco_antigo)
-                desconto = round(100 * (preco_antigo_val - preco_oferta_val) / preco_antigo_val) if preco_antigo_val else 0
-                preco_antigo_str = f"R$ {preco_antigo_val:.2f}".replace('.', ',')
-                preco_html = f"""
-                    <div><b>{preco_formatado}</b> <span style='color:red;'>({desconto}% OFF)</span></div>
-                    <div><span style='color:gray; text-decoration: line-through;'>{preco_antigo_str}</span></div>
-                """
-            else:
-                preco_html = f"<div><b>{preco_formatado}</b></div>"
-            preco_info_extra = ""
-            descricao_modificada = descricao
-            if 'papel higienico' in remover_acentos(descricao):
-                descricao_modificada = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", descricao_modificada, flags=re.IGNORECASE)
-                descricao_modificada = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", descricao_modificada, flags=re.IGNORECASE)
-            total_folhas, preco_por_folha = calcular_preco_papel_toalha(descricao, preco_total)
-            if total_folhas and preco_por_folha:
-                descricao_modificada += f" <span style='color:gray;'>({total_folhas} folhas)</span>"
-                preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_por_folha:.3f}/folha</div>"
-            else:
-                _, preco_por_metro_str = calcular_precos_papel(descricao, preco_total)
-                _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
-                if preco_por_metro_str:
-                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
-                if preco_por_unidade_str:
-                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
-            st.markdown(f"""
-                <div class='product-container'>
-                    <div class='product-image'>
-                        <img src='{imagem_url}' width='80'/>
-                    </div>
-                    <div class='product-info'>
-                        <div style='margin-bottom: 4px;'><b>{descricao_modificada}</b></div>
-                        <div style='font-size:0.85em;'>{preco_html}</div>
-                        <div style='font-size:0.85em;'>{preco_info_extra}</div>
-                    </div>
-                </div>
-                <hr class='product-separator' />
-            """, unsafe_allow_html=True)
+            # Exibição dos resultados na COLUNA 1 (Shibata)
+        with col1:
+                st.markdown(f"""
+                    <h5 style="display: flex; align-items: center; justify-content: center;">
+                    <img src="https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png" width="60" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+                    Shibata
+                    </h5>
+                """, unsafe_allow_html=True)
+                st.markdown(f"<small>🔎 {len(produtos_shibata_ordenados)} produto(s) encontrado(s) no Shibata.</small>", unsafe_allow_html=True)
+                if not produtos_shibata_ordenados:
+                    st.warning("Nenhum produto encontrado no Shibata.")
+                for p in produtos_shibata_ordenados:
+                    preco = float(p.get('preco') or 0)
+                    descricao = p.get('descricao', '')
+                    imagem = p.get('imagem', '')
+                    em_oferta = p.get('em_oferta', False)
+                    oferta_info = p.get('oferta') or {}
+                    preco_oferta = oferta_info.get('preco_oferta')
+                    preco_antigo = oferta_info.get('preco_antigo')
+                    imagem_url = f"https://produtos.vipcommerce.com.br/250x250/{imagem}"
+                    preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
+                    quantidade_dif = p.get('quantidade_unidade_diferente')
+                    unidade_sigla = p.get('unidade_sigla')
+                    preco_formatado = formatar_preco_unidade_personalizado(preco_total, quantidade_dif, unidade_sigla)
+                    if em_oferta and preco_oferta and preco_antigo:
+                        preco_oferta_val = float(preco_oferta)
+                        preco_antigo_val = float(preco_antigo)
+                        desconto = round(100 * (preco_antigo_val - preco_oferta_val) / preco_antigo_val) if preco_antigo_val else 0
+                        preco_antigo_str = f"R$ {preco_antigo_val:.2f}".replace('.', ',')
+                        preco_html = f"""
+                            <div><b>{preco_formatado}</b><br> <span style='color:red;font-weight: bold;'>({desconto}% OFF)</span></div>
+                            <div><span style='color:gray; text-decoration: line-through;'>{preco_antigo_str}</span></div>
+                        """
+                    else:
+                        preco_html = f"<div><b>{preco_formatado}</b></div>"
+                    preco_info_extra = ""
+                    descricao_modificada = descricao
+                    if 'papel higienico' in remover_acentos(descricao):
+                        descricao_modificada = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", descricao_modificada, flags=re.IGNORECASE)
+                        descricao_modificada = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", descricao_modificada, flags=re.IGNORECASE)
+                    total_folhas, preco_por_folha = calcular_preco_papel_toalha(descricao, preco_total)
+                    if total_folhas and preco_por_folha:
+                        descricao_modificada += f" <span style='color:gray;'>({total_folhas} folhas)</span>"
+                        preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_por_folha:.3f}/folha</div>"
+                    else:
+                        _, preco_por_metro_str = calcular_precos_papel(descricao, preco_total)
+                        _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
+                        if preco_por_metro_str:
+                            preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
+                        if preco_por_unidade_str:
+                            preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
+                    st.markdown(f"""
+                        <div class='product-container'>
+                            <div class='product-image'>
+    <img src='{imagem_url}' width='80' style='display: block;'/>
+    <img src='https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png' width='80' 
+         style='background-color: white; display: block; margin: 0 auto; border-radius: 4px; padding: 3px;'/>
+</div>
+                            <div class='product-info'>
+                                <div style='margin-bottom: 4px;'><b>{descricao_modificada}</b></div>
+                                <div style='font-size:0.85em;'>{preco_html}</div>
+                                <div style='font-size:0.85em;'>{preco_info_extra}</div>
+                            </div>
+                        </div>
+                        <hr class='product-separator' />
+                    """, unsafe_allow_html=True)
 
     # Exibição dos resultados na COLUNA 2 (Nagumo)
     with col2:
@@ -558,8 +572,8 @@ if termo:
             if preco_desconto and preco_desconto < preco:
                 desconto_percentual = ((preco - preco_desconto) / preco) * 100
                 preco_html = f"""
-                    <span style='font-weight: bold; font-size: 1rem;'>R$ {preco_desconto:.2f}</span>
-                    <span style='color: red; font-size: 0.9rem;'> ({desconto_percentual:.0f}% OFF)</span><br>
+                    <span style='font-weight: bold; font-size: 1rem;'>R$ {preco_desconto:.2f}</span><br>
+                    <span style='color: red; font-weight: bold;'> ({desconto_percentual:.0f}% OFF)</span><br>
                     <span style='text-decoration: line-through; color: gray;'>R$ {preco:.2f}</span>
                 """
             else:
@@ -567,8 +581,9 @@ if termo:
             st.markdown(f"""
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
-                        <img src="{imagem}" width="80" style="border-radius:8px;">
-                    </div>
+                        <img src="{imagem}" width="80" style="border-radius:8px; display: block;"/>
+                        <img src="https://institucional.nagumo.com.br/images/nagumo-2000.png" width="80" style="background-color: white; border-radius: 4px; padding: 3px; display: block;"/>
+</div>
                     <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
                         <strong>{p['titulo_exibido']}</strong><br>
                         <strong>{preco_html}</strong><br>
