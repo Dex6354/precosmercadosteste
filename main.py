@@ -692,8 +692,16 @@ if termo:
                             _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
                             if preco_por_metro_str:
                                 preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
-                            if preco_por_unidade_str:
-                                preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
+                            # Evitar mostrar preço por unidade baseado na descrição se a unidade já está presente no preço_formatado
+                            # Se já há unidade válida no preço formatado, evita duplicar info do título
+                            match_preco_formatado = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml|un|l|ml|folhas?|m)", preco_formatado.lower())
+                            unidade_presente_no_preco = bool(match_preco_formatado)
+                            if not unidade_presente_no_preco:
+
+                                _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
+                                if preco_por_unidade_str:
+                                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
+
 
                         # Preço por unidade (ovo)
                         if 'ovo' in remover_acentos(descricao).lower():
