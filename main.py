@@ -467,7 +467,16 @@ if termo:
 
         termo_sem_acento = remover_acentos(termo)
         palavras_termo = termo_sem_acento.split()
-        produtos_shibata_filtrados = [p for p in produtos_shibata if all(palavra in remover_acentos(p.get('descricao', '')) for palavra in palavras_termo)]
+        produtos_shibata_filtrados = [
+            p for p in produtos_shibata
+            if all(
+                palavra in remover_acentos(
+                    f"{p.get('descricao', '')} {p.get('nome', '')}"
+                ) for palavra in palavras_termo
+            )
+        ]
+
+
 
         produtos_shibata_processados = []
         for p in produtos_shibata_filtrados:
@@ -536,11 +545,30 @@ if termo:
             produtos_shibata_ordenados = sorted(produtos_shibata_processados, key=lambda x: x['preco_por_metro_val'])
         else:
             def preco_mais_preciso(produto):
+                descricao = produto.get('descricao', '').lower()
+                preco = float(produto.get('preco') or 0)
+                oferta = produto.get('oferta') or {}
+                preco_oferta = oferta.get('preco_oferta')
+                em_oferta = produto.get('em_oferta', False)
+                preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
+
+                # 🥚 Prioridade especial para ovo ou dúzia
+                if 'ovo' in remover_acentos(descricao):
+                    match_duzia = re.search(r'1\s*d[uú]zia', descricao)
+                    if match_duzia:
+                        return preco_total / 12
+                    match = re.search(r'(\d+)\s*(unidades|un|ovos|c\/|c\d+|com)', descricao)
+                    if match:
+                        qtd = int(match.group(1))
+                        if qtd > 0:
+                            return preco_total / qtd
+
+                # Normal: unidade/kg/L se disponível
                 valores = []
 
                 unidade = produto.get('preco_unidade_val')
-                litro = produto.get('preco_por_litro_val')  # se estiver implementado
-                peso = produto.get('preco_por_kg_val')      # se estiver implementado
+                litro = produto.get('preco_por_litro_val')  # se implementado
+                peso = produto.get('preco_por_kg_val')      # se implementado
 
                 if unidade and unidade != float('inf'):
                     valores.append(unidade)
@@ -552,27 +580,8 @@ if termo:
                 if valores:
                     return min(valores)
 
-                # Checa ovo ou dúzia
-                descricao = produto.get('descricao', '').lower()
-                preco = float(produto.get('preco') or 0)
-                oferta = produto.get('oferta') or {}
-                preco_oferta = oferta.get('preco_oferta')
-                em_oferta = produto.get('em_oferta', False)
-                preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
-
-                # Detecta "1 dúzia" (ou variações) e calcula preço por 12 unidades
-                match_duzia = re.search(r'1\s*d[uú]zia', descricao)
-                if match_duzia:
-                    return preco_total / 12
-
-                # Caso não tenha dúzia, tenta extrair número de unidades comuns
-                match = re.search(r'(\d+)\s*(unidades|un|ovos|c\/|c\d+|com)', descricao)
-                if match:
-                    qtd = int(match.group(1))
-                    if qtd > 0:
-                        return preco_total / qtd
-
                 return float('inf')
+
 
 
             produtos_shibata_ordenados = sorted(produtos_shibata_processados, key=preco_mais_preciso)
