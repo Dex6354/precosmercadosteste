@@ -639,7 +639,7 @@ if termo:
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
-                        <img src="https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+                        <img src="https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
                         Shibata
                         </h5>
                     """, unsafe_allow_html=True)
@@ -743,7 +743,7 @@ if termo:
                             <div class='product-container'>
                                 <div class='product-image'>
                                     <img src='{imagem_url}' width='80' style='display: block;'/>
-                                    <img src='https://raw.githubusercontent.com/Dex6354/PrecoShibata/refs/heads/main/logo-shibata.png' width='80' 
+                                    <img src='https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-shibata.png' width='80' 
                                         style='background-color: white; display: block; margin: 0 auto; border-radius: 4px; padding: 3px;'/>
                                 </div>
                                 <div class='product-info'>
@@ -760,7 +760,7 @@ if termo:
     with col2:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="https://institucional.nagumo.com.br/images/nagumo-2000.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
+                <img src="https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-nagumo.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
                 Nagumo
             </h5>
         """, unsafe_allow_html=True)
@@ -789,7 +789,7 @@ if termo:
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
                         <img src="{imagem}" width="80" style="border-radius:8px; display: block;"/>
-                        <img src="https://institucional.nagumo.com.br/images/nagumo-2000.png" width="80" style="background-color: white; border-radius: 4px; padding: 3px; display: block;"/>
+                        <img src="https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-nagumo.png" width="80" style="background-color: white; border-radius: 4px; padding: 3px; display: block;"/>
 </div>
                     <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
                         <strong>{p['titulo_exibido']}</strong><br>
