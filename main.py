@@ -301,6 +301,7 @@ def buscar_nagumo(term="banana"):
                 "minScore": 1,
                 "pageSize": 100,
                 "search": [{"query": term}],
+                "sort": 2, # <-- AJUSTE APLICADO AQUI
                 "filters": {},
                 "googleAnalyticsSessionId": ""
             }
@@ -439,7 +440,7 @@ margin-bottom: 20px;
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
 
-termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip().lower()
+termo = st.text_input("🔎 Digite o nome do produtoo:", "Banana").strip().lower()
 
 # Expansão automática (singular/plural)
 termos_expandidos = gerar_formas_variantes(remover_acentos(termo))
@@ -632,6 +633,7 @@ if termo:
                     titulo = re.sub(r"(folha dupla|folha tripla)", r"<span style='color:green; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
             p['titulo_exibido'] = titulo
 
+        # A ordenação manual é mantida como uma garantia, mas a API já deve retornar os produtos ordenados
         produtos_nagumo_ordenados = sorted(produtos_nagumo_filtrados, key=lambda x: x['preco_unitario_valor'])
 
     # Exibição dos resultados na COLUNA 1 (Shibata)
@@ -639,7 +641,7 @@ if termo:
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
-                        <img src="https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+                        <img src="https://raw.githubusercontent.com/gymbr/precosmercados/refs/heads/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
                         Shibata
                         </h5>
                     """, unsafe_allow_html=True)
@@ -701,7 +703,7 @@ if termo:
                             _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
                             if preco_por_metro_str:
                                 preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
-                            # Evitar mostrar preço por unidade baseado na descrição se a unidade já está presente no preço_formatado
+                            # Evitar mostrar preço por unidade baseado na descrição se a unidade já está presente no preco_formatado
                             # Se já há unidade válida no preço formatado, evita duplicar info do título
                             match_preco_formatado = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml|un|l|ml|folhas?|m)", preco_formatado.lower())
                             unidade_presente_no_preco = bool(match_preco_formatado)
@@ -743,7 +745,7 @@ if termo:
                             <div class='product-container'>
                                 <div class='product-image'>
                                     <img src='{imagem_url}' width='80' style='display: block;'/>
-                                    <img src='https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-shibata.png' width='80' 
+                                    <img src='https://raw.githubusercontent.com/gymbr/precosmercados/refs/heads/main/logo-shibata.png' width='80' 
                                         style='background-color: white; display: block; margin: 0 auto; border-radius: 4px; padding: 3px;'/>
                                 </div>
                                 <div class='product-info'>
@@ -760,7 +762,7 @@ if termo:
     with col2:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-nagumo.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
+                <img src="https://raw.githubusercontent.com/gymbr/precosmercados/refs/heads/main/logo-nagumo.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
                 Nagumo
             </h5>
         """, unsafe_allow_html=True)
@@ -789,7 +791,7 @@ if termo:
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
                         <img src="{imagem}" width="80" style="border-radius:8px; display: block;"/>
-                        <img src="https://raw.githubusercontent.com/Dex6354/Precos-Mercados/refs/heads/main/logo-nagumo.png" width="80" style="background-color: white; border-radius: 4px; padding: 3px; display: block;"/>
+                        <img src="https://raw.githubusercontent.com/gymbr/precosmercados/refs/heads/main/logo-nagumo.png" width="80" style="background-color: white; border-radius: 4px; padding: 3px; display: block;"/>
 </div>
                     <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
                         <strong>{p['titulo_exibido']}</strong><br>
