@@ -639,7 +639,7 @@ if termo:
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
-                        <img src="https://raw.githubusercontent.com/gymbr/precosmercados/refs/heads/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+                        <img src="logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
                         Shibata
                         </h5>
                     """, unsafe_allow_html=True)
