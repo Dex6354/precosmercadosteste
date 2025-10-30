@@ -299,7 +299,7 @@ def buscar_nagumo(term="banana"):
                 "storeReference": "22",
                 "currentPage": 1,
                 "minScore": 1,
-                "pageSize": 300,
+                "pageSize": 400,
                 "search": [{"query": term}],
                 "filters": {},
                 "googleAnalyticsSessionId": ""
