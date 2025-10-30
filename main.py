@@ -760,7 +760,7 @@ if termo:
     with col2:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png" width="80" style="margin-right:8px; border-radius: 6px; padding: 0px;"/>
+                <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo.png" width="80" style="margin-right:8px; border-radius: 6px; padding: 0px;"/>
                 Nagumo
             </h5>
         """, unsafe_allow_html=True)
@@ -789,7 +789,7 @@ if termo:
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
                         <img src="{imagem}" width="80" style="border-radius:8px; display: block;"/>
-                        <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png" width="80" style="border-radius: 6px; padding: 0px; display: block;"/>
+                        <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo.png" width="80" style="border-radius: 6px; padding: 0px; display: block;"/>
 </div>
                     <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
                         <strong>{p['titulo_exibido']}</strong><br>
