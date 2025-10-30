@@ -299,7 +299,7 @@ def buscar_nagumo(term="banana"):
                 "storeReference": "22",
                 "currentPage": 1,
                 "minScore": 1,
-                "pageSize": 600,
+                "pageSize": 500,
                 "search": [{"query": term}],
                 "filters": {},
                 "googleAnalyticsSessionId": ""
@@ -639,7 +639,7 @@ if termo:
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
-                        <img src="logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+                        <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-shibata.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
                         Shibata
                         </h5>
                     """, unsafe_allow_html=True)
@@ -743,7 +743,7 @@ if termo:
                             <div class='product-container'>
                                 <div class='product-image'>
                                     <img src='{imagem_url}' width='80' style='display: block;'/>
-                                    <img src='logo-shibata.png' width='80' 
+                                    <img src='https://rawcdn.githack.com/gymbr/precosmercados/main/logo-shibata.png' width='80' 
                                         style='background-color: white; display: block; margin: 0 auto; border-radius: 4px; padding: 3px;'/>
                                 </div>
                                 <div class='product-info'>
