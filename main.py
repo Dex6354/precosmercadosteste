@@ -760,7 +760,7 @@ if termo:
     with col2:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 2px;"/>
+                <img src="https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png" width="80" style="margin-right:8px; border-radius: 4px; padding: 2px;"/>
                 Nagumo
             </h5>
         """, unsafe_allow_html=True)
