@@ -743,7 +743,7 @@ if termo:
                             <div class='product-container'>
                                 <div class='product-image'>
                                     <img src='{imagem_url}' width='80' style='display: block;'/>
-                                    <img src='https://raw.githubusercontent.com/gymbr/precosmercados/refs/heads/main/logo-shibata.png' width='80' 
+                                    <img src='logo-shibata.png' width='80' 
                                         style='background-color: white; display: block; margin: 0 auto; border-radius: 4px; padding: 3px;'/>
                                 </div>
                                 <div class='product-info'>
