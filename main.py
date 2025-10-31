@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configurações para Shibata
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESppH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
+TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
 ORG_ID = "161"
 HEADERS_SHIBATA = {
     "Authorization": f"Bearer {TOKEN}",
@@ -362,6 +362,7 @@ def buscar_nagumo(terms_list):
 # OTIMIZAÇÃO NAGUMO (FIM)
 # =============================================================================
 
+
 # Configuração da página
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
@@ -471,7 +472,9 @@ if termo:
     col1, col2 = st.columns(2)
 
     with st.spinner("🔍 Buscando produtos..."):
-        # Processa e busca Shibata
+        # =============================================================================
+        # LÓGICA ORIGINAL DO SHIBATA (INÍCIO)
+        # =============================================================================
         produtos_shibata = []
         max_workers = 8
         max_paginas = 15
@@ -497,7 +500,9 @@ if termo:
                 ) for palavra in palavras_termo
             )
         ]
-
+        # =============================================================================
+        # LÓGICA ORIGINAL DO SHIBATA (FIM)
+        # =============================================================================
 
 
         produtos_shibata_processados = []
@@ -614,7 +619,7 @@ if termo:
         # Junta todos os termos e faz UMA chamada
         # =============================================================================
         
-        # Coleta todos os termos de busca únicos
+        # Coleta todos os termos de busca únicos (palavras_termo já está definido acima)
         termos_unicos_nagumo = list(set(termos_expandidos) | set(palavras_termo))
         
         # Faz UMA ÚNICA chamada à API com todos os termos
@@ -662,7 +667,7 @@ if termo:
         produtos_nagumo_ordenados = sorted(produtos_nagumo_filtrados, key=lambda x: x['preco_unitario_valor'])
 
     # Exibição dos resultados na COLUNA 1 (Shibata)
-            # Exibição dos resultados na COLUNA 1 (Shibata)
+            # Exibição dos resultados na COLUNA 1 (ShibATA)
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
