@@ -504,34 +504,39 @@ if termo:
             preco_unidade_val, _ = calcular_preco_unidade(descricao_limpa, preco_total)
 
             # 🧠 NOVO: tenta extrair unidade direto do preço formatado (ex: /0,15kg → calcula R$/kg)
-            match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_unidade_str.lower())
-            if match:
-                try:
-                    quantidade = float(match.group(1).replace(",", "."))
-                    unidade = match.group(2).lower()
-                    if unidade == "g":
-                        quantidade /= 1000
-                        unidade = "kg"
-                    elif unidade == "ml":
-                        quantidade /= 1000
-                        unidade = "l"
-                    if quantidade > 0:
-                        preco_unidade_val = preco_total / quantidade
-                        preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
-                except:
-                    pass
+            if preco_unidade_str: # Adiciona verificação se a string não é None
+                match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_unidade_str.lower())
+                if match:
+                    try:
+                        quantidade = float(match.group(1).replace(",", "."))
+                        unidade = match.group(2).lower()
+                        if unidade == "g":
+                            quantidade /= 1000
+                            unidade = "kg"
+                        elif unidade == "ml":
+                            quantidade /= 1000
+                            unidade = "l"
+                        if quantidade > 0:
+                            preco_unidade_val = preco_total / quantidade
+                            preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
+                    except:
+                        pass
 
 
 
             preco_por_metro_val, _ = calcular_precos_papel(descricao, preco_total)
 
             # Se não foi possível calcular preço por unidade (como kg, L), apenas repete a unidade do preço
-            if not preco_unidade_val or preco_unidade_val == float('inf'):
+            if (not preco_unidade_val or preco_unidade_val == float('inf')) and preco_unidade_str: # Adiciona verificação se a string não é None
                 # Tenta extrair unidade do preço formatado original
                 match_unidade = re.search(r"/\s*([a-zA-Z]+)", preco_unidade_str.lower())
                 unidade_fallback = match_unidade.group(1) if match_unidade else "un"
                 preco_unidade_val = preco_total
                 preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_total:.2f}/{unidade_fallback}</span>"
+            elif not preco_unidade_str: # Caso preco_unidade_str seja None
+                 preco_unidade_val = preco_total
+                 preco_unidade_str = f"<span style='color:gray;'>R$ {preco_total:.2f}/un</span>"
+
 
             # Atualiza os campos usados na ordenação e exibição
             p['preco_unidade_val'] = preco_unidade_val
@@ -600,8 +605,10 @@ if termo:
         for termo_expandido in termos_expandidos:
             produtos_nagumo.extend(buscar_nagumo(termo_expandido))
 
-        for palavra in palavras_termo:
-            produtos_nagumo.extend(buscar_nagumo(palavra))
+        # Busca por palavras individuais também (para garantir mais resultados)
+        if len(palavras_termo) > 1:
+            for palavra in palavras_termo:
+                produtos_nagumo.extend(buscar_nagumo(palavra))
 
         produtos_nagumo_unicos = {p['sku']: p for p in produtos_nagumo}.values()
 
@@ -619,7 +626,8 @@ if termo:
             preco_desconto = None
             if promocao.get("isActive") and isinstance(cond, list) and len(cond) > 0:
                 preco_desconto = cond[0].get("price")
-            preco_exibir = preco_desconto if preco_desconto else preco_normal
+            preco_exibir = preco_desconto if (preco_desconto and preco_desconto < preco_normal) else preco_normal
+
 
             p['preco_unitario_str'] = calcular_preco_unitario_nagumo(preco_exibir, p['description'], p['name'], p.get("unit"))
             p['preco_unitario_valor'] = extrair_valor_unitario(p['preco_unitario_str'])
@@ -670,29 +678,35 @@ if termo:
                         unidade_sigla = p.get('unidade_sigla')
                         preco_formatado = formatar_preco_unidade_personalizado(preco_total, quantidade_dif, unidade_sigla)
 
+                        # Se preco_formatado for None (ex: unidade 'grande' foi ignorada), cria um básico
+                        if not preco_formatado:
+                            preco_formatado = f"R$ {preco_total:.2f}".replace('.', ',') + "/un"
+
+
                         preco_info_extra = ""
                         descricao_modificada = descricao
 
                         # Cálculo extraído de preco_formatado: /0,15kg ou /250ml
-                        match_preco_unitario = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_formatado.lower())
-                        if match_preco_unitario:
-                            quantidade_str = match_preco_unitario.group(1).replace(",", ".")
-                            unidade = match_preco_unitario.group(2)
+                        if preco_formatado: # Verifica se preco_formatado não é None
+                            match_preco_unitario = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_formatado.lower())
+                            if match_preco_unitario:
+                                quantidade_str = match_preco_unitario.group(1).replace(",", ".")
+                                unidade = match_preco_unitario.group(2)
 
-                            try:
-                                quantidade = float(quantidade_str)
-                                if unidade == "g":
-                                    quantidade /= 1000
-                                    unidade = "kg"
-                                elif unidade == "ml":
-                                    quantidade /= 1000
-                                    unidade = "l"
+                                try:
+                                    quantidade = float(quantidade_str)
+                                    if unidade == "g":
+                                        quantidade /= 1000
+                                        unidade = "kg"
+                                    elif unidade == "ml":
+                                        quantidade /= 1000
+                                        unidade = "l"
 
-                                if quantidade > 0:
-                                    preco_unitario = preco_total / quantidade
-                                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_unitario:.2f}/{unidade}</div>"
-                            except:
-                                pass
+                                    if quantidade > 0:
+                                        preco_unitario = preco_total / quantidade
+                                        preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_unitario:.2f}/{unidade}</div>"
+                                except:
+                                    pass
 
                         # Destaques para papel higiênico
                         if 'papel higienico' in remover_acentos(descricao):
@@ -709,12 +723,15 @@ if termo:
                             _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
                             if preco_por_metro_str:
                                 preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
+                            
                             # Evitar mostrar preço por unidade baseado na descrição se a unidade já está presente no preco_formatado
                             # Se já há unidade válida no preço formatado, evita duplicar info do título
-                            match_preco_formatado = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml|un|l|ml|folhas?|m)", preco_formatado.lower())
-                            unidade_presente_no_preco = bool(match_preco_formatado)
+                            unidade_presente_no_preco = False
+                            if preco_formatado: # Verifica se preco_formatado não é None
+                                match_preco_formatado = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml|un|l|ml|folhas?|m)", preco_formatado.lower())
+                                unidade_presente_no_preco = bool(match_preco_formatado)
+                            
                             if not unidade_presente_no_preco:
-
                                 _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
                                 if preco_por_unidade_str:
                                     preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
@@ -735,16 +752,23 @@ if termo:
 
                         # Preço (com ou sem oferta)
                         if em_oferta and preco_oferta and preco_antigo:
-                            preco_oferta_val = float(preco_oferta)
-                            preco_antigo_val = float(preco_antigo)
-                            desconto = round(100 * (preco_antigo_val - preco_oferta_val) / preco_antigo_val) if preco_antigo_val else 0
-                            preco_antigo_str = f"R$ {preco_antigo_val:.2f}".replace('.', ',')
-                            preco_html = f"""
-                                <div><b>{preco_formatado}</b><br> <span style='color:red;font-weight: bold;'>({desconto}% OFF)</span></div>
-                                <div><span style='color:gray; text-decoration: line-through;'>{preco_antigo_str}</span></div>
-                            """
+                            try:
+                                preco_oferta_val = float(preco_oferta)
+                                preco_antigo_val = float(preco_antigo)
+                                if preco_antigo_val > 0 and preco_antigo_val > preco_oferta_val: # Evita divisão por zero e descontos negativos
+                                    desconto = round(100 * (preco_antigo_val - preco_oferta_val) / preco_antigo_val)
+                                    preco_antigo_str = f"R$ {preco_antigo_val:.2f}".replace('.', ',')
+                                    preco_html = f"""
+                                        <div><b>{preco_formatado}</b><br> <span style='color:red;font-weight: bold;'>({desconto}% OFF)</span></div>
+                                        <div><span style='color:gray; text-decoration: line-through;'>{preco_antigo_str}</span></div>
+                                    """
+                                else:
+                                    preco_html = f"<div><b>{preco_formatado}</b></div>" # Caso antigo < oferta
+                            except (ValueError, TypeError):
+                                preco_html = f"<div><b>{preco_formatado}</b></div>" # Caso valor inválido
                         else:
                             preco_html = f"<div><b>{preco_formatado}</b></div>"
+
 
                         # Renderização final do produto
                         st.markdown(f"""
@@ -778,24 +802,38 @@ if termo:
             
             # AJUSTE 3: Lógica para usar imagem padrão se 'photosUrl' estiver vazia ou for None
             photos_list = p.get('photosUrl')
-            imagem = photos_list[0] if photos_list else DEFAULT_IMAGE_URL
+            imagem = photos_list[0] if (photos_list and isinstance(photos_list, list) and len(photos_list) > 0) else DEFAULT_IMAGE_URL
 
             preco_unitario = p['preco_unitario_str']
-            preco = p['price']
+            preco = p.get('price', 0)
             promocao = p.get("promotion") or {}
             cond = promocao.get("conditions") or []
             preco_desconto = None
+            
             if promocao.get("isActive") and isinstance(cond, list) and len(cond) > 0:
+                # Pega o primeiro preço da lista de condições
                 preco_desconto = cond[0].get("price")
-            if preco_desconto and preco_desconto < preco:
-                desconto_percentual = ((preco - preco_desconto) / preco) * 100
-                preco_html = f"""
-                    <span style='font-weight: bold; font-size: 1rem;'>R$ {preco_desconto:.2f}</span><br>
-                    <span style='color: red; font-weight: bold;'> ({desconto_percentual:.0f}% OFF)</span><br>
-                    <span style='text-decoration: line-through; color: gray;'>R$ {preco:.2f}</span>
-                """
+
+            # Verifica se o preço de desconto é válido (não nulo e menor que o preço normal)
+            if preco_desconto is not None and preco_desconto < preco:
+                try:
+                    preco_val = float(preco)
+                    preco_desc_val = float(preco_desconto)
+                    if preco_val > 0: # Evita divisão por zero
+                        desconto_percentual = ((preco_val - preco_desc_val) / preco_val) * 100
+                        preco_html = f"""
+                            <span style='font-weight: bold; font-size: 1rem;'>R$ {preco_desc_val:.2f}</span><br>
+                            <span style='color: red; font-weight: bold;'> ({desconto_percentual:.0f}% OFF)</span><br>
+                            <span style='text-decoration: line-through; color: gray;'>R$ {preco_val:.2f}</span>
+                        """
+                    else:
+                        preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {preco_desc_val:.2f}</span>"
+                except (ValueError, TypeError):
+                     preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {float(preco):.2f}</span>" # Fallback
             else:
-                preco_html = f"R$ {preco:.2f}"
+                # Se não há desconto válido, mostra o preço normal
+                preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {float(preco):.2f}</span>"
+                
             st.markdown(f"""
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
@@ -806,7 +844,7 @@ if termo:
                         <strong>{p['titulo_exibido']}</strong><br>
                         <strong>{preco_html}</strong><br>
                         <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{preco_unitario}</div>
-                        <div style="color: gray; font-size: 0.8em;">Estoque: {p['stock']}</div>
+                        <div style="color: gray; font-size: 0.8em;">Estoque: {p.get('stock', 'N/A')}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
