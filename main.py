@@ -439,7 +439,7 @@ margin-bottom: 20px;
     </style>
 """, unsafe_allow_html=True)
 
-st.title("<h3 style='text-align:center; font-size:1.3rem; font-weight:700;'>🛒 Preços Mercados</h3>")
+st.subheader("🛒 Preços Mercados")
 
 termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip().lower()
 
