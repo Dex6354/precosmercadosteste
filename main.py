@@ -793,7 +793,7 @@ if termo:
             st.markdown(f"""
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
-                        <img src="{imagem}" width="80" style="border-radius:8px; display: block;"/>
+                        <img src="{imagem}" width="80" style="border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
                         <img src="{LOGO_NAGUMO_URL}" width="80" style="border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
                     </div>
                     <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
