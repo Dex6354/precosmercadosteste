@@ -837,7 +837,7 @@ if termo:
                         <strong>{preco_html}</strong><br>
                         <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{preco_unitario}</div>
                         <div style="color: gray; font-size: 0.8em;">Estoque: {p['stock']}</div>
-                        {/* */}
+                        
                         <div style="color: gray; font-size: 0.8em;">SKU: {p.get("sku")}</div>
                     </div>
                 </div>
