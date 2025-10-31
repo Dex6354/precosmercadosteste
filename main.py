@@ -12,7 +12,7 @@ header[data-testid="stHeader"] {
 
 /* Oculta o rodapé padrão do Streamlit */
 footer {
-    visibility: hidden;
+    display: none;
 }
 
 /* Oculta também a barra inferior de "Made with Streamlit" */
