@@ -17,7 +17,7 @@ HEADERS_SHIBATA = {
 
 # Links dos logos
 LOGO_SHIBATA_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-shibata.png" # Logo do Shibata
-LOGO_NAGUMO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo.png"   # Logo do Nagumo
+LOGO_NAGUMO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png"   # Logo do Nagumo
 
 
 # Funções utilitárias
