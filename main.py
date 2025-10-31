@@ -365,9 +365,6 @@ st.markdown("""
             max-width: 80px;
             flex-shrink: 0;
         }
-        .product-image img {
-            border-radius: 8px;
-        }
         .product-info {
     flex: 1 1 auto;
     min-width: 0; /* 👈 ESSENCIAL para permitir quebra */
