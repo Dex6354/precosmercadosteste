@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configurações para Shibata
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
+TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESppH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
 ORG_ID = "161"
 HEADERS_SHIBATA = {
     "Authorization": f"Bearer {TOKEN}",
@@ -286,17 +286,7 @@ def extrair_valor_unitario(preco_unitario):
         return float(match.group(1).replace(',', '.'))
     return float('inf')
 
-# =============================================================================
-# OTIMIZAÇÃO NAGUMO (INÍCIO)
-# A função agora aceita uma lista de termos
-# =============================================================================
-def buscar_nagumo(terms_list):
-    """Busca produtos no Nagumo usando uma LISTA de termos de busca."""
-    
-    # Se a lista de termos estiver vazia, não faz a chamada
-    if not terms_list:
-        return []
-
+def buscar_nagumo(term="banana"):
     url = "https://nextgentheadless.instaleap.io/api/v3"
     headers = {
         "Content-Type": "application/json",
@@ -306,10 +296,6 @@ def buscar_nagumo(terms_list):
         "apollographql-client-name": "Ecommerce SSR",
         "apollographql-client-version": "0.11.0"
     }
-    
-    # Transforma a lista de strings em uma lista de objetos {"query": term}
-    search_queries = [{"query": term} for term in terms_list]
-    
     payload = {
         "operationName": "SearchProducts",
         "variables": {
@@ -318,8 +304,8 @@ def buscar_nagumo(terms_list):
                 "storeReference": "22",
                 "currentPage": 1,
                 "minScore": 1,
-                "pageSize": 500, # Mantém o page size alto
-                "search": search_queries, # <--- MUDANÇA PRINCIPAL
+                "pageSize": 500,
+                "search": [{"query": term}],
                 "filters": {},
                 "googleAnalyticsSessionId": ""
             }
@@ -358,10 +344,6 @@ def buscar_nagumo(terms_list):
     except Exception as e:
         st.error(f"Ocorreu um erro ao processar a resposta do Nagumo: {e}")
         return []
-# =============================================================================
-# OTIMIZAÇÃO NAGUMO (FIM)
-# =============================================================================
-
 
 # Configuração da página
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
@@ -457,6 +439,27 @@ margin-bottom: 20px;
 header[data-testid="stHeader"] {
     display: none;
         }
+
+    /* --- NOVO CSS ADICIONADO --- */
+    .scroll-to-top {
+        position: sticky; /* Gruda na área de visualização da coluna */
+        bottom: 20px;     /* 20px do fundo */
+        margin-left: auto; /* Alinha à direita */
+        margin-right: 20px; /* Espaçamento da borda direita */
+        display: none;     /* Oculto por padrão (JS vai mostrar) */
+        padding: 8px 12px;
+        background-color: rgba(85, 85, 85, 0.8); /* Fundo semi-transparente */
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        z-index: 1000;
+        font-size: 0.75rem !important; /* Mantém o tamanho da fonte */
+        width: 110px; /* Largura fixa */
+        text-align: center;
+    }
+    /* --- FIM DO NOVO CSS --- */
+        
     </style>
 """, unsafe_allow_html=True)
 
@@ -472,9 +475,7 @@ if termo:
     col1, col2 = st.columns(2)
 
     with st.spinner("🔍 Buscando produtos..."):
-        # =============================================================================
-        # LÓGICA ORIGINAL DO SHIBATA (INÍCIO)
-        # =============================================================================
+        # Processa e busca Shibata
         produtos_shibata = []
         max_workers = 8
         max_paginas = 15
@@ -500,9 +501,7 @@ if termo:
                 ) for palavra in palavras_termo
             )
         ]
-        # =============================================================================
-        # LÓGICA ORIGINAL DO SHIBATA (FIM)
-        # =============================================================================
+
 
 
         produtos_shibata_processados = []
@@ -525,23 +524,25 @@ if termo:
             preco_unidade_val, _ = calcular_preco_unidade(descricao_limpa, preco_total)
 
             # 🧠 NOVO: tenta extrair unidade direto do preço formatado (ex: /0,15kg → calcula R$/kg)
-            match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_unidade_str.lower())
-            if match:
-                try:
-                    quantidade = float(match.group(1).replace(",", "."))
-                    unidade = match.group(2).lower()
-                    if unidade == "g":
-                        quantidade /= 1000
-                        unidade = "kg"
-                    elif unidade == "ml":
-                        quantidade /= 1000
-                        unidade = "l"
-                    if quantidade > 0:
-                        preco_unidade_val = preco_total / quantidade
-                        preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
-                except:
-                    pass
-
+            if preco_unidade_str: # Adiciona verificação se a string não é None
+                match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_unidade_str.lower())
+                if match:
+                    try:
+                        quantidade = float(match.group(1).replace(",", "."))
+                        unidade = match.group(2).lower()
+                        if unidade == "g":
+                            quantidade /= 1000
+                            unidade = "kg"
+                        elif unidade == "ml":
+                            quantidade /= 1000
+                            unidade = "l"
+                        if quantidade > 0:
+                            preco_unidade_val = preco_total / quantidade
+                            preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
+                    except:
+                        pass
+            else: # Se preco_unidade_str for None, inicializa como string vazia
+                preco_unidade_str = ""
 
 
             preco_por_metro_val, _ = calcular_precos_papel(descricao, preco_total)
@@ -552,7 +553,11 @@ if termo:
                 match_unidade = re.search(r"/\s*([a-zA-Z]+)", preco_unidade_str.lower())
                 unidade_fallback = match_unidade.group(1) if match_unidade else "un"
                 preco_unidade_val = preco_total
-                preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_total:.2f}/{unidade_fallback}</span>"
+                if not preco_unidade_str: # Se ainda estiver vazio
+                     preco_unidade_str = f"R$ {preco_total:.2f}/{unidade_fallback}"
+                else:
+                    preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_total:.2f}/{unidade_fallback}</span>"
+
 
             # Atualiza os campos usados na ordenação e exibição
             p['preco_unidade_val'] = preco_unidade_val
@@ -614,20 +619,15 @@ if termo:
             produtos_shibata_ordenados = sorted(produtos_shibata_processados, key=preco_mais_preciso)
 
 
-        # =============================================================================
-        # OTIMIZAÇÃO NAGUMO (INÍCIO)
-        # Junta todos os termos e faz UMA chamada
-        # =============================================================================
-        
-        # Coleta todos os termos de busca únicos (palavras_termo já está definido acima)
-        termos_unicos_nagumo = list(set(termos_expandidos) | set(palavras_termo))
-        
-        # Faz UMA ÚNICA chamada à API com todos os termos
-        produtos_nagumo = buscar_nagumo(termos_unicos_nagumo)
-        
-        # =============================================================================
-        # OTIMIZAÇÃO NAGUMO (FIM)
-        # =============================================================================
+        # Processa e busca Nagumo
+        produtos_nagumo = []
+
+        # Adiciona cada termo expandido à busca
+        for termo_expandido in termos_expandidos:
+            produtos_nagumo.extend(buscar_nagumo(termo_expandido))
+
+        for palavra in palavras_termo:
+            produtos_nagumo.extend(buscar_nagumo(palavra))
 
         produtos_nagumo_unicos = {p['sku']: p for p in produtos_nagumo}.values()
 
@@ -667,7 +667,7 @@ if termo:
         produtos_nagumo_ordenados = sorted(produtos_nagumo_filtrados, key=lambda x: x['preco_unitario_valor'])
 
     # Exibição dos resultados na COLUNA 1 (Shibata)
-            # Exibição dos resultados na COLUNA 1 (ShibATA)
+            # Exibição dos resultados na COLUNA 1 (Shibata)
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
@@ -692,6 +692,10 @@ if termo:
                         quantidade_dif = p.get('quantidade_unidade_diferente')
                         unidade_sigla = p.get('unidade_sigla')
                         preco_formatado = formatar_preco_unidade_personalizado(preco_total, quantidade_dif, unidade_sigla)
+                        
+                        # Se formatar_preco_unidade_personalizado retornar None (ex: sem unidade_sigla)
+                        if not preco_formatado:
+                            preco_formatado = f"R$ {preco_total:.2f}".replace('.', ',')
 
                         preco_info_extra = ""
                         descricao_modificada = descricao
@@ -781,10 +785,17 @@ if termo:
                                     <div style='margin-bottom: 4px;'><b>{descricao_modificada}</b></div>
                                     <div style='font-size:0.85em;'>{preco_html}</div>
                                     <div style='font-size:0.85em;'>{preco_info_extra}</div>
+                                    {/* */}
+                                    <div style='color:gray; font-size:0.7em; margin-top: 4px;'>ID: {p.get("id")}</div>
                                 </div>
                             </div>
                             <hr class='product-separator' />
                         """, unsafe_allow_html=True)
+                    
+                    # --- NOVO BOTÃO ADICIONADO (SHIBATA) ---
+                    # Adiciona o botão "Voltar ao Topo" para a coluna 1
+                    # O onclick usa &quot; para as aspas internas de forma segura no HTML
+                    st.markdown('<button id="scrollTopBtnShibata" class="scroll-to-top" onclick="document.querySelectorAll(\'[data-testid=&quot;stColumn&quot;]\')[0].scrollTo({top: 0, behavior: \'smooth\'});">Voltar ao Topo</button>', unsafe_allow_html=True)
 
 
     # Exibição dos resultados na COLUNA 2 (Nagumo)
@@ -826,7 +837,62 @@ if termo:
                         <strong>{preco_html}</strong><br>
                         <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{preco_unitario}</div>
                         <div style="color: gray; font-size: 0.8em;">Estoque: {p['stock']}</div>
+                        {/* */}
+                        <div style="color: gray; font-size: 0.8em;">SKU: {p.get("sku")}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
+            
+        # --- NOVO BOTÃO ADICIONADO (NAGUMO) ---
+        # Adiciona o botão "Voltar ao Topo" para a coluna 2
+        st.markdown('<button id="scrollTopBtnNagumo" class="scroll-to-top" onclick="document.querySelectorAll(\'[data-testid=&quot;stColumn&quot;]\')[1].scrollTo({top: 0, behavior: \'smooth\'});">Voltar ao Topo</button>', unsafe_allow_html=True)
+
+
+    # --- NOVO JAVASCRIPT ADICIONADO ---
+    # Adiciona o JavaScript para controlar a visibilidade dos botões "Voltar ao Topo"
+    st.markdown("""
+    <script>
+    (function() {
+        // Usamos um ID único para o intervalo para evitar duplicação em reruns do Streamlit
+        if (window.myColumnScrollChecker) {
+            clearInterval(window.myColumnScrollChecker);
+        }
+
+        // Verifica a cada 100ms se os elementos estão prontos
+        window.myColumnScrollChecker = setInterval(() => {
+            const cols = document.querySelectorAll('[data-testid="stColumn"]');
+            const btn1 = document.getElementById('scrollTopBtnShibata');
+            const btn2 = document.getElementById('scrollTopBtnNagumo');
+
+            // Procura pelas 2 colunas e pelos 2 botões
+            if (cols.length >= 2 && btn1 && btn2) {
+                
+                // Para o intervalo assim que encontrar os elementos
+                clearInterval(window.myColumnScrollChecker); 
+
+                const col1 = cols[0];
+                const col2 = cols[1];
+
+                // Handler para coluna 1 (Shibata)
+                col1.onscroll = function() {
+                    if (col1.scrollTop > 200) { // Mostra depois de rolar 200px
+                        btn1.style.display = "block";
+                    } else {
+                        btn1.style.display = "none";
+                    }
+                };
+
+                // Handler for coluna 2 (Nagumo)
+                col2.onscroll = function() {
+                    if (col2.scrollTop > 200) { // Mostra depois de rolar 200px
+                        btn2.style.display = "block";
+                    } else {
+                        btn2.style.display = "none";
+                    }
+                };
+            }
+        }, 100); 
+    })();
+    </script>
+    """, unsafe_allow_html=True)
