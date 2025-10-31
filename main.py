@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configurações para Shibata
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESppH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
+TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
 ORG_ID = "161"
 HEADERS_SHIBATA = {
     "Authorization": f"Bearer {TOKEN}",
@@ -18,6 +18,7 @@ HEADERS_SHIBATA = {
 # Links dos logos
 LOGO_SHIBATA_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-shibata.png" # Logo do Shibata
 LOGO_NAGUMO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png"   # Logo do Nagumo
+DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png" # Imagem padrão
 
 
 # Funções utilitárias
@@ -439,27 +440,6 @@ margin-bottom: 20px;
 header[data-testid="stHeader"] {
     display: none;
         }
-
-    /* --- NOVO CSS ADICIONADO --- */
-    .scroll-to-top {
-        position: sticky; /* Gruda na área de visualização da coluna */
-        bottom: 20px;     /* 20px do fundo */
-        margin-left: auto; /* Alinha à direita */
-        margin-right: 20px; /* Espaçamento da borda direita */
-        display: none;     /* Oculto por padrão (JS vai mostrar) */
-        padding: 8px 12px;
-        background-color: rgba(85, 85, 85, 0.8); /* Fundo semi-transparente */
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        z-index: 1000;
-        font-size: 0.75rem !important; /* Mantém o tamanho da fonte */
-        width: 110px; /* Largura fixa */
-        text-align: center;
-    }
-    /* --- FIM DO NOVO CSS --- */
-        
     </style>
 """, unsafe_allow_html=True)
 
@@ -524,25 +504,23 @@ if termo:
             preco_unidade_val, _ = calcular_preco_unidade(descricao_limpa, preco_total)
 
             # 🧠 NOVO: tenta extrair unidade direto do preço formatado (ex: /0,15kg → calcula R$/kg)
-            if preco_unidade_str: # Adiciona verificação se a string não é None
-                match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_unidade_str.lower())
-                if match:
-                    try:
-                        quantidade = float(match.group(1).replace(",", "."))
-                        unidade = match.group(2).lower()
-                        if unidade == "g":
-                            quantidade /= 1000
-                            unidade = "kg"
-                        elif unidade == "ml":
-                            quantidade /= 1000
-                            unidade = "l"
-                        if quantidade > 0:
-                            preco_unidade_val = preco_total / quantidade
-                            preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
-                    except:
-                        pass
-            else: # Se preco_unidade_str for None, inicializa como string vazia
-                preco_unidade_str = ""
+            match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_unidade_str.lower())
+            if match:
+                try:
+                    quantidade = float(match.group(1).replace(",", "."))
+                    unidade = match.group(2).lower()
+                    if unidade == "g":
+                        quantidade /= 1000
+                        unidade = "kg"
+                    elif unidade == "ml":
+                        quantidade /= 1000
+                        unidade = "l"
+                    if quantidade > 0:
+                        preco_unidade_val = preco_total / quantidade
+                        preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
+                except:
+                    pass
+
 
 
             preco_por_metro_val, _ = calcular_precos_papel(descricao, preco_total)
@@ -553,11 +531,7 @@ if termo:
                 match_unidade = re.search(r"/\s*([a-zA-Z]+)", preco_unidade_str.lower())
                 unidade_fallback = match_unidade.group(1) if match_unidade else "un"
                 preco_unidade_val = preco_total
-                if not preco_unidade_str: # Se ainda estiver vazio
-                     preco_unidade_str = f"R$ {preco_total:.2f}/{unidade_fallback}"
-                else:
-                    preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_total:.2f}/{unidade_fallback}</span>"
-
+                preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_total:.2f}/{unidade_fallback}</span>"
 
             # Atualiza os campos usados na ordenação e exibição
             p['preco_unidade_val'] = preco_unidade_val
@@ -687,15 +661,14 @@ if termo:
                         oferta_info = p.get('oferta') or {}
                         preco_oferta = oferta_info.get('preco_oferta')
                         preco_antigo = oferta_info.get('preco_antigo')
-                        imagem_url = f"https://produtos.vipcommerce.com.br/250x250/{imagem}"
+                        
+                        # AJUSTE 1: Usar imagem padrão se 'imagem' estiver vazia
+                        imagem_url = f"https://produtos.vipcommerce.com.br/250x250/{imagem}" if imagem else DEFAULT_IMAGE_URL
+                        
                         preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
                         quantidade_dif = p.get('quantidade_unidade_diferente')
                         unidade_sigla = p.get('unidade_sigla')
                         preco_formatado = formatar_preco_unidade_personalizado(preco_total, quantidade_dif, unidade_sigla)
-                        
-                        # Se formatar_preco_unidade_personalizado retornar None (ex: sem unidade_sigla)
-                        if not preco_formatado:
-                            preco_formatado = f"R$ {preco_total:.2f}".replace('.', ',')
 
                         preco_info_extra = ""
                         descricao_modificada = descricao
@@ -777,7 +750,7 @@ if termo:
                         st.markdown(f"""
                             <div class='product-container'>
                                 <div class='product-image'>
-                                    <img src='{imagem_url}' width='80' style='border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
+                                    <img src='{imagem_url}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
                                     <img src='{LOGO_SHIBATA_URL}' width='80' 
                                         style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
                                 </div>
@@ -785,17 +758,10 @@ if termo:
                                     <div style='margin-bottom: 4px;'><b>{descricao_modificada}</b></div>
                                     <div style='font-size:0.85em;'>{preco_html}</div>
                                     <div style='font-size:0.85em;'>{preco_info_extra}</div>
-                                    
-                                    <div style='color:gray; font-size:0.7em; margin-top: 4px;'>ID: {p.get("id")}</div>
                                 </div>
                             </div>
                             <hr class='product-separator' />
                         """, unsafe_allow_html=True)
-                    
-                    # --- NOVO BOTÃO ADICIONADO (SHIBATA) ---
-                    # Adiciona o botão "Voltar ao Topo" para a coluna 1
-                    # O onclick usa &quot; para as aspas internas de forma segura no HTML
-                    st.markdown('<button id="scrollTopBtnShibata" class="scroll-to-top" onclick="document.querySelectorAll(\'[data-testid=&quot;stColumn&quot;]\')[0].scrollTo({top: 0, behavior: \'smooth\'});">Voltar ao Topo</button>', unsafe_allow_html=True)
 
 
     # Exibição dos resultados na COLUNA 2 (Nagumo)
@@ -809,7 +775,11 @@ if termo:
         if not produtos_nagumo_ordenados:
             st.warning("Nenhum produto encontrado.")
         for p in produtos_nagumo_ordenados:
-            imagem = p['photosUrl'][0] if p.get('photosUrl') else ""
+            
+            # AJUSTE 3: Lógica para usar imagem padrão se 'photosUrl' estiver vazia ou for None
+            photos_list = p.get('photosUrl')
+            imagem = photos_list[0] if photos_list else DEFAULT_IMAGE_URL
+
             preco_unitario = p['preco_unitario_str']
             preco = p['price']
             promocao = p.get("promotion") or {}
@@ -829,7 +799,7 @@ if termo:
             st.markdown(f"""
                 <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
                     <div style="flex: 0 0 auto;">
-                        <img src="{imagem}" width="80" style="border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
+                        <img src="{imagem}" width="80" style="background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
                         <img src="{LOGO_NAGUMO_URL}" width="80" style="border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
                     </div>
                     <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
@@ -837,62 +807,7 @@ if termo:
                         <strong>{preco_html}</strong><br>
                         <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{preco_unitario}</div>
                         <div style="color: gray; font-size: 0.8em;">Estoque: {p['stock']}</div>
-                        
-                        <div style="color: gray; font-size: 0.8em;">SKU: {p.get("sku")}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
-            
-        # --- NOVO BOTÃO ADICIONADO (NAGUMO) ---
-        # Adiciona o botão "Voltar ao Topo" para a coluna 2
-        st.markdown('<button id="scrollTopBtnNagumo" class="scroll-to-top" onclick="document.querySelectorAll(\'[data-testid=&quot;stColumn&quot;]\')[1].scrollTo({top: 0, behavior: \'smooth\'});">Voltar ao Topo</button>', unsafe_allow_html=True)
-
-
-    # --- NOVO JAVASCRIPT ADICIONADO ---
-    # Adiciona o JavaScript para controlar a visibilidade dos botões "Voltar ao Topo"
-    st.markdown("""
-    <script>
-    (function() {
-        // Usamos um ID único para o intervalo para evitar duplicação em reruns do Streamlit
-        if (window.myColumnScrollChecker) {
-            clearInterval(window.myColumnScrollChecker);
-        }
-
-        // Verifica a cada 100ms se os elementos estão prontos
-        window.myColumnScrollChecker = setInterval(() => {
-            const cols = document.querySelectorAll('[data-testid="stColumn"]');
-            const btn1 = document.getElementById('scrollTopBtnShibata');
-            const btn2 = document.getElementById('scrollTopBtnNagumo');
-
-            // Procura pelas 2 colunas e pelos 2 botões
-            if (cols.length >= 2 && btn1 && btn2) {
-                
-                // Para o intervalo assim que encontrar os elementos
-                clearInterval(window.myColumnScrollChecker); 
-
-                const col1 = cols[0];
-                const col2 = cols[1];
-
-                // Handler para coluna 1 (Shibata)
-                col1.onscroll = function() {
-                    if (col1.scrollTop > 200) { // Mostra depois de rolar 200px
-                        btn1.style.display = "block";
-                    } else {
-                        btn1.style.display = "none";
-                    }
-                };
-
-                // Handler for coluna 2 (Nagumo)
-                col2.onscroll = function() {
-                    if (col2.scrollTop > 200) { // Mostra depois de rolar 200px
-                        btn2.style.display = "block";
-                    } else {
-                        btn2.style.display = "none";
-                    }
-                };
-            }
-        }, 100); 
-    })();
-    </script>
-    """, unsafe_allow_html=True)
