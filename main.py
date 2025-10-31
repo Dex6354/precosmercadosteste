@@ -641,8 +641,7 @@ if termo:
         with col1:
                     st.markdown(f"""
                         <h5 style="display: flex; align-items: center; justify-content: center;">
-                        <img src="{LOGO_SHIBATA_URL}" width="80" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
-                        Shibata
+                        <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
                         </h5>
                     """, unsafe_allow_html=True)
                     st.markdown(f"<small>🔎 {len(produtos_shibata_ordenados)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
