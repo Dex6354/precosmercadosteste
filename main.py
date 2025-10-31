@@ -785,7 +785,7 @@ if termo:
                                     <div style='margin-bottom: 4px;'><b>{descricao_modificada}</b></div>
                                     <div style='font-size:0.85em;'>{preco_html}</div>
                                     <div style='font-size:0.85em;'>{preco_info_extra}</div>
-                                    {/* */}
+                                    
                                     <div style='color:gray; font-size:0.7em; margin-top: 4px;'>ID: {p.get("id")}</div>
                                 </div>
                             </div>
