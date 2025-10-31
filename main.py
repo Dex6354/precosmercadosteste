@@ -765,7 +765,7 @@ if termo:
     with col2:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="{LOGO_NAGUMO_URL}" width="80" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
+                <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
             </h5>
         """, unsafe_allow_html=True)
         st.markdown(f"<small>🔎 {len(produtos_nagumo_ordenados)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
