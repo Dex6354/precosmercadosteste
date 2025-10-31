@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configurações para Shibata
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
+TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESppH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
 ORG_ID = "161"
 HEADERS_SHIBATA = {
     "Authorization": f"Bearer {TOKEN}",
@@ -286,7 +286,17 @@ def extrair_valor_unitario(preco_unitario):
         return float(match.group(1).replace(',', '.'))
     return float('inf')
 
-def buscar_nagumo(term="banana"):
+# =============================================================================
+# OTIMIZAÇÃO NAGUMO (INÍCIO)
+# A função agora aceita uma lista de termos
+# =============================================================================
+def buscar_nagumo(terms_list):
+    """Busca produtos no Nagumo usando uma LISTA de termos de busca."""
+    
+    # Se a lista de termos estiver vazia, não faz a chamada
+    if not terms_list:
+        return []
+
     url = "https://nextgentheadless.instaleap.io/api/v3"
     headers = {
         "Content-Type": "application/json",
@@ -296,6 +306,10 @@ def buscar_nagumo(term="banana"):
         "apollographql-client-name": "Ecommerce SSR",
         "apollographql-client-version": "0.11.0"
     }
+    
+    # Transforma a lista de strings em uma lista de objetos {"query": term}
+    search_queries = [{"query": term} for term in terms_list]
+    
     payload = {
         "operationName": "SearchProducts",
         "variables": {
@@ -304,8 +318,8 @@ def buscar_nagumo(term="banana"):
                 "storeReference": "22",
                 "currentPage": 1,
                 "minScore": 1,
-                "pageSize": 500,
-                "search": [{"query": term}],
+                "pageSize": 500, # Mantém o page size alto
+                "search": search_queries, # <--- MUDANÇA PRINCIPAL
                 "filters": {},
                 "googleAnalyticsSessionId": ""
             }
@@ -344,6 +358,9 @@ def buscar_nagumo(term="banana"):
     except Exception as e:
         st.error(f"Ocorreu um erro ao processar a resposta do Nagumo: {e}")
         return []
+# =============================================================================
+# OTIMIZAÇÃO NAGUMO (FIM)
+# =============================================================================
 
 # Configuração da página
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
@@ -592,15 +609,20 @@ if termo:
             produtos_shibata_ordenados = sorted(produtos_shibata_processados, key=preco_mais_preciso)
 
 
-        # Processa e busca Nagumo
-        produtos_nagumo = []
-
-        # Adiciona cada termo expandido à busca
-        for termo_expandido in termos_expandidos:
-            produtos_nagumo.extend(buscar_nagumo(termo_expandido))
-
-        for palavra in palavras_termo:
-            produtos_nagumo.extend(buscar_nagumo(palavra))
+        # =============================================================================
+        # OTIMIZAÇÃO NAGUMO (INÍCIO)
+        # Junta todos os termos e faz UMA chamada
+        # =============================================================================
+        
+        # Coleta todos os termos de busca únicos
+        termos_unicos_nagumo = list(set(termos_expandidos) | set(palavras_termo))
+        
+        # Faz UMA ÚNICA chamada à API com todos os termos
+        produtos_nagumo = buscar_nagumo(termos_unicos_nagumo)
+        
+        # =============================================================================
+        # OTIMIZAÇÃO NAGUMO (FIM)
+        # =============================================================================
 
         produtos_nagumo_unicos = {p['sku']: p for p in produtos_nagumo}.values()
 
