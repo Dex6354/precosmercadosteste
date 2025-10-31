@@ -663,7 +663,7 @@ if termo:
                         preco_antigo = oferta_info.get('preco_antigo')
                         
                         # AJUSTE 1: Usar imagem padrão se 'imagem' estiver vazia
-                        imagem_url = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/250x250/{imagem}" if imagem else DEFAULT_IMAGE_URL
+                        imagem_url = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{imagem}" if imagem else DEFAULT_IMAGE_URL
                         
                         preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
                         quantidade_dif = p.get('quantidade_unidade_diferente')
