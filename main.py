@@ -747,7 +747,7 @@ if termo:
                         st.markdown(f"""
                             <div class='product-container'>
                                 <div class='product-image'>
-                                    <img src='{imagem_url}' width='80' style='display: block;'/>
+                                    <img src='{imagem_url}' width='80' style='border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
                                     <img src='{LOGO_SHIBATA_URL}' width='80' 
                                         style='background-color: white; display: block; margin: 0 auto; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
                                 </div>
