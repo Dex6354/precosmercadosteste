@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configurações para Shibata
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
+TOKEN = "eyJ0eXAiOiJKVQiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
 ORG_ID = "161"
 HEADERS_SHIBATA = {
     "Authorization": f"Bearer {TOKEN}",
@@ -59,19 +59,23 @@ def calcular_preco_unidade(descricao, preco_total):
     match_kg = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo)', desc_minus)
     if match_kg:
         peso = float(match_kg.group(1).replace(',', '.'))
-        return preco_total / peso, f"R$ {preco_total / peso:.2f}".replace('.', ',') + "/kg"
+        if peso > 0:
+            return preco_total / peso, f"R$ {preco_total / peso:.2f}".replace('.', ',') + "/kg"
     match_g = re.search(r'(\d+(?:[\.,]\d+)?)\s*(g|gramas?)', desc_minus)
     if match_g:
         peso = float(match_g.group(1).replace(',', '.')) / 1000
-        return preco_total / peso, f"R$ {preco_total / peso:.2f}".replace('.', ',') + "/kg"
+        if peso > 0:
+            return preco_total / peso, f"R$ {preco_total / peso:.2f}".replace('.', ',') + "/kg"
     match_l = re.search(r'(\d+(?:[\.,]\d+)?)\s*(l|litros?)', desc_minus)
     if match_l:
         litros = float(match_l.group(1).replace(',', '.'))
-        return preco_total / litros, f"R$ {preco_total / litros:.2f}".replace('.', ',') + "/L"
+        if litros > 0:
+            return preco_total / litros, f"R$ {preco_total / litros:.2f}".replace('.', ',') + "/L"
     match_ml = re.search(r'(\d+(?:[\.,]\d+)?)\s*(ml|mililitros?)', desc_minus)
     if match_ml:
         litros = float(match_ml.group(1).replace(',', '.')) / 1000
-        return preco_total / litros, f"R$ {preco_total / litros:.2f}".replace('.', ',') + "/L"
+        if litros > 0:
+            return preco_total / litros, f"R$ {preco_total / litros:.2f}".replace('.', ',') + "/L"
     return None, None
 
 def calcular_preco_papel_toalha(descricao, preco_total):
@@ -671,7 +675,8 @@ if termo:
                         preco_antigo = oferta_info.get('preco_antigo')
                         
                         # AJUSTE 1: Usar imagem padrão se 'imagem' estiver vazia
-                        imagem_url = f"https://produtos.vipcommerce.com.br/250x250/{imagem}" if imagem else DEFAULT_IMAGE_URL
+                        # AJUSTE 2: Alterado o domínio da imagem
+                        imagem_url = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/250x250/{imagem}" if imagem else DEFAULT_IMAGE_URL
                         
                         preco_total = float(preco_oferta) if em_oferta and preco_oferta else preco
                         quantidade_dif = p.get('quantidade_unidade_diferente')
