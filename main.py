@@ -142,14 +142,31 @@ def buscar_pagina_shibata(termo, pagina):
             data = response.json().get('data', {}).get('produtos', [])
             return [produto for produto in data if produto.get("disponivel", True)]
         else:
-            st.error(f"Erro na busca do Shibata (página {pagina}): Status {response.status_code}")
+            # st.error(f"Erro na busca do Shibata (página {pagina}): Status {response.status_code}") # Comentado para não poluir
             return []
     except requests.exceptions.RequestException as e:
-        st.error(f"Erro de conexão com Shibata (página {pagina}): {e}")
+        # st.error(f"Erro de conexão com Shibata (página {pagina}): {e}") # Comentado para não poluir
         return []
     except Exception as e:
-        st.error(f"Ocorreu um erro ao processar a resposta do Shibata (página {pagina}): {e}")
+        # st.error(f"Ocorreu um erro ao processar a resposta do Shibata (página {pagina}): {e}") # Comentado para não poluir
         return []
+
+def obter_campos_shibata(termo_busca="banana"):
+    """Busca um produto no Shibata e retorna as chaves do primeiro item encontrado."""
+    url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo_busca}?page=1"
+    try:
+        response = requests.get(url, headers=HEADERS_SHIBATA, timeout=10)
+        if response.status_code == 200:
+            data = response.json().get('data', {}).get('produtos', [])
+            if data and isinstance(data, list) and len(data) > 0:
+                primeiro_produto = data[0]
+                return list(primeiro_produto.keys())
+        return None
+    except requests.exceptions.RequestException:
+        return None
+    except Exception:
+        return None
+
 
 # Funções para Nagumo
 def contem_papel_toalha(texto):
@@ -444,6 +461,26 @@ header[data-testid="stHeader"] {
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
+
+# --- NOVO: Exibe os nomes dos campos do Shibata em um Expander ---
+with st.expander("ℹ️ Campos de Retorno da API do Shibata"):
+    campos_shibata = obter_campos_shibata()
+    if campos_shibata:
+        st.markdown("**Campos retornados pela API (exemplo):**")
+        st.markdown(f"""
+            * **Nome do Item:** `descricao` (ou `nome`)\
+            * **Preço:** `preco` (preço normal), `oferta.preco_oferta` (preço em oferta)\
+            * **ID/SKU:** `id`\
+            * **Unidade (Exibição):** `unidade_sigla`, `quantidade_unidade_diferente`\
+            * **Imagem:** `imagem`\
+            * **Status da Oferta:** `em_oferta`\
+            * **Outros Campos:** `{'`, `'.join([c for c in campos_shibata if c not in ['descricao', 'nome', 'preco', 'id', 'unidade_sigla', 'quantidade_unidade_diferente', 'imagem', 'em_oferta', 'oferta']])}`
+        """)
+        # st.json(campos_shibata) # Opcional: Descomentar para ver a lista crua de chaves.
+    else:
+        st.warning("Não foi possível carregar os nomes dos campos do Shibata. Erro de conexão ou produto não encontrado.")
+# -----------------------------------------------------------------
+
 
 termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip().lower()
 
