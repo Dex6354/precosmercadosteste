@@ -476,7 +476,7 @@ with st.expander("ℹ️ Campos de Retorno da API do Shibata"):
             * **Status da Oferta:** `em_oferta`\
             * **Outros Campos:** `{'`, `'.join([c for c in campos_shibata if c not in ['descricao', 'nome', 'preco', 'id', 'unidade_sigla', 'quantidade_unidade_diferente', 'imagem', 'em_oferta', 'oferta']])}`
         """)
-        # st.json(campos_shibata) # Opcional: Descomentar para ver a lista crua de chaves.
+         st.json(campos_shibata) # Opcional: Descomentar para ver a lista crua de chaves.
     else:
         st.warning("Não foi possível carregar os nomes dos campos do Shibata. Erro de conexão ou produto não encontrado.")
 # -----------------------------------------------------------------
