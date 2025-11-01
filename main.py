@@ -142,31 +142,14 @@ def buscar_pagina_shibata(termo, pagina):
             data = response.json().get('data', {}).get('produtos', [])
             return [produto for produto in data if produto.get("disponivel", True)]
         else:
-            # st.error(f"Erro na busca do Shibata (página {pagina}): Status {response.status_code}") # Comentado para não poluir
+            # st.error(f"Erro na busca do Shibata (página {pagina}): Status {response.status_code}") # Comentado para não poluir o Streamlit
             return []
     except requests.exceptions.RequestException as e:
-        # st.error(f"Erro de conexão com Shibata (página {pagina}): {e}") # Comentado para não poluir
+        # st.error(f"Erro de conexão com Shibata (página {pagina}): {e}") # Comentado para não poluir o Streamlit
         return []
     except Exception as e:
-        # st.error(f"Ocorreu um erro ao processar a resposta do Shibata (página {pagina}): {e}") # Comentado para não poluir
+        # st.error(f"Ocorreu um erro ao processar a resposta do Shibata (página {pagina}): {e}") # Comentado para não poluir o Streamlit
         return []
-
-def obter_campos_shibata(termo_busca="banana"):
-    """Busca um produto no Shibata e retorna as chaves do primeiro item encontrado."""
-    url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo_busca}?page=1"
-    try:
-        response = requests.get(url, headers=HEADERS_SHIBATA, timeout=10)
-        if response.status_code == 200:
-            data = response.json().get('data', {}).get('produtos', [])
-            if data and isinstance(data, list) and len(data) > 0:
-                primeiro_produto = data[0]
-                return list(primeiro_produto.keys())
-        return None
-    except requests.exceptions.RequestException:
-        return None
-    except Exception:
-        return None
-
 
 # Funções para Nagumo
 def contem_papel_toalha(texto):
@@ -462,26 +445,6 @@ header[data-testid="stHeader"] {
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
 
-# --- NOVO: Exibe os nomes dos campos do Shibata em um Expander ---
-with st.expander("ℹ️ Campos de Retorno da API do Shibata"):
-    campos_shibata = obter_campos_shibata()
-    if campos_shibata:
-        st.markdown("**Campos retornados pela API (exemplo):**")
-        st.markdown(f"""
-            * **Nome do Item:** `descricao` (ou `nome`)\
-            * **Preço:** `preco` (preço normal), `oferta.preco_oferta` (preço em oferta)\
-            * **ID/SKU:** `id`\
-            * **Unidade (Exibição):** `unidade_sigla`, `quantidade_unidade_diferente`\
-            * **Imagem:** `imagem`\
-            * **Status da Oferta:** `em_oferta`\
-            * **Outros Campos:** `{'`, `'.join([c for c in campos_shibata if c not in ['descricao', 'nome', 'preco', 'id', 'unidade_sigla', 'quantidade_unidade_diferente', 'imagem', 'em_oferta', 'oferta']])}`
-        """)
-         st.json(campos_shibata) # Opcional: Descomentar para ver a lista crua de chaves.
-    else:
-        st.warning("Não foi possível carregar os nomes dos campos do Shibata. Erro de conexão ou produto não encontrado.")
-# -----------------------------------------------------------------
-
-
 termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip().lower()
 
 # Expansão automática (singular/plural)
@@ -694,6 +657,7 @@ if termo:
                         preco = float(p.get('preco') or 0)
                         descricao = p.get('descricao', '')
                         imagem = p.get('imagem', '')
+                        id_item = p.get('id', 'N/A') # Extrai o ID
                         em_oferta = p.get('em_oferta', False)
                         oferta_info = p.get('oferta') or {}
                         preco_oferta = oferta_info.get('preco_oferta')
@@ -707,6 +671,12 @@ if termo:
                         unidade_sigla = p.get('unidade_sigla')
                         preco_formatado = formatar_preco_unidade_personalizado(preco_total, quantidade_dif, unidade_sigla)
 
+                        # Determine the original field name for the price shown
+                        if em_oferta and preco_oferta:
+                            campo_preco_original = "oferta.preco_oferta"
+                        else:
+                            campo_preco_original = "preco"
+                        
                         preco_info_extra = ""
                         descricao_modificada = descricao
 
@@ -783,6 +753,15 @@ if termo:
                         else:
                             preco_html = f"<div><b>{preco_formatado}</b></div>"
 
+                        # NOVO: Informação dos campos originais da API (conforme solicitado)
+                        api_fields_info = f"""
+                            <div style='font-size:0.75em; margin-top: 5px; border-top: 1px dashed #ddd; padding-top: 5px; color: #444; word-break: break-word;'>
+                                <div style='margin-bottom: 2px;'><b>Nome:</b> {descricao} <span style='color:gray;'>(Campo: <code>descricao</code>)</span></div>
+                                <div style='margin-bottom: 2px;'><b>ID:</b> {id_item} <span style='color:gray;'>(Campo: <code>id</code>)</span></div>
+                                <div style='margin-bottom: 2px;'><b>Preço Retornado:</b> R$ {preco_total:.2f} <span style='color:gray;'>(Campo: <code>{campo_preco_original}</code>)</span></div>
+                            </div>
+                        """
+
                         # Renderização final do produto
                         st.markdown(f"""
                             <div class='product-container'>
@@ -795,6 +774,7 @@ if termo:
                                     <div style='margin-bottom: 4px;'><b>{descricao_modificada}</b></div>
                                     <div style='font-size:0.85em;'>{preco_html}</div>
                                     <div style='font-size:0.85em;'>{preco_info_extra}</div>
+                                    {api_fields_info}
                                 </div>
                             </div>
                             <hr class='product-separator' />
