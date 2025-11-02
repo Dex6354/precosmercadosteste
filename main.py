@@ -498,7 +498,8 @@ if termo:
                 continue
             
             # --- Criação da URL do Shibata ---
-            produto_id = p.get('id')
+            # CORREÇÃO: Usando 'produto_id' conforme solicitado pelo usuário.
+            produto_id = p.get('produto_id') 
             produto_nome_url = slugify(p.get('descricao', p.get('nome', 'produto')))
             if produto_id:
                 p['url_shibata'] = f"https://www.loja.shibata.com.br/produto/{produto_id}/{produto_nome_url}"
@@ -535,8 +536,8 @@ if termo:
                         quantidade /= 1000
                         unidade = "l"
                     if quantidade > 0:
-                        preco_unidade_val = preco_total / quantidade
-                        preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unidade_val:.2f}/{unidade}</span>"
+                        preco_unitario = preco_total / quantidade
+                        preco_unidade_str += f"<br><span style='color:gray;'>R$ {preco_unitario:.2f}/{unidade}</span>"
                 except:
                     pass
 
