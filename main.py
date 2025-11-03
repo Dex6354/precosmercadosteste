@@ -1,29 +1,68 @@
 import streamlit as st
-from streamlit.components.v1 import html
+import requests
+from bs4 import BeautifulSoup
 
-st.set_page_config(layout="wide", page_title="Monitor de Preços (Tentativa de Embed)")
+st.set_page_config(layout="centered", page_title="Monitor de Preços (Scraping)")
 
-st.title("🛒 Monitor de Preços da Centauro (Via iFrame)")
-st.warning("Aviso: A maioria dos sites de e-commerce, como a Centauro, bloqueia a incorporação via iFrame por motivos de segurança (CSP). É provável que você veja uma tela em branco ou uma mensagem de erro de carregamento.")
+st.title("💰 Monitor de Preços - Centauro (Via Scraping)")
 
-# Links dos produtos
-link1 = "https://www.centauro.com.br/bermuda-masculina-oxer-ls-basic-new-984889.html?cor=04"
-link2 = "https://www.centauro.com.br/bermuda-masculina-oxer-mesh-mescla-983436.html?cor=MS"
+# URLs
+urls = {
+    "Bermuda Oxer Basic": "https://www.centauro.com.br/bermuda-masculina-oxer-ls-basic-new-984889.html?cor=04",
+    "Bermuda Oxer Mesh": "https://www.centauro.com.br/bermuda-masculina-oxer-mesh-mescla-983436.html?cor=MS"
+}
 
-# Dimensões do iFrame
-altura_iframe = 600
+def extrair_preco(url):
+    """Tenta extrair o preço da URL usando requests e BeautifulSoup."""
+    try:
+        # Adiciona um User-Agent para parecer um navegador real
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status() # Levanta um erro para códigos de status ruins (4xx ou 5xx)
 
-# Exibindo os iFrames
-col1, col2 = st.columns(2)
+        soup = BeautifulSoup(response.content, 'html.parser')
 
-with col1:
-    st.subheader("Bermuda Oxer Basic")
-    # Tentativa de embed usando st.components.v1.iframe
-    html_content1 = f'<iframe src="{link1}" width="100%" height="{altura_iframe}px"></iframe>'
-    st.components.v1.html(html_content1, height=altura_iframe + 30) # +30 para margem/título
+        # --- ATENÇÃO: ESTE SELETOR É UM CHUTE E DEVE SER VERIFICADO NO SITE REAL ---
+        # Geralmente, preços estão em tags específicas com classes como 'price', 'current-price', etc.
+        # Eu estou usando um placeholder comum. Você precisa inspecionar o site para encontrar a classe correta.
+        
+        # Exemplo de seletor que você *poderia* ter que ajustar:
+        preco_tag = soup.find('span', class_='Price-sc-15437d31-2') # **MUDE ISSO PARA O SELETOR REAL**
+        
+        if preco_tag:
+            preco = preco_tag.text.strip()
+            return preco
+        else:
+            return "Preço não encontrado (Seletor incorreto?)"
 
-with col2:
-    st.subheader("Bermuda Oxer Mesh")
-    # Tentativa de embed usando st.components.v1.iframe
-    html_content2 = f'<iframe src="{link2}" width="100%" height="{altura_iframe}px"></iframe>'
-    st.components.v1.html(html_content2, height=altura_iframe + 30) # +30 para margem/título
+    except requests.exceptions.RequestException as e:
+        return f"Erro de conexão: {e}"
+    except Exception as e:
+        return f"Erro inesperado: {e}"
+
+# Dicionário para armazenar os resultados
+precos_atuais = {}
+
+# Coletando os dados
+with st.spinner('Coletando preços...'):
+    for nome, url in urls.items():
+        precos_atuais[nome] = extrair_preco(url)
+
+# --- Exibição dos Resultados ---
+
+st.header("Preços Atualizados:")
+
+dados_tabela = []
+for nome, preco in precos_atuais.items():
+    dados_tabela.append({
+        "Produto": nome,
+        "Preço Atual": preco,
+        "Link": urls[nome]
+    })
+
+# Criação da Tabela no Streamlit
+st.table(dados_tabela)
+
+st.info("Lembre-se de inspecionar o site da Centauro para encontrar o seletor CSS correto e atualizar a linha `preco_tag = soup.find(...)` no código para garantir a extração correta do preço.")
