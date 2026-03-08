@@ -24,6 +24,7 @@ DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-im
 # --- FUNÇÕES UTILITÁRIAS COMUNS ---
 def remover_acentos(texto):
     if not texto: return ""
+    # Normaliza para remover acentos e converte para minúsculo
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
 
 def gerar_formas_variantes(termo):
@@ -38,7 +39,7 @@ def slugify(text):
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-# --- LÓGICA DE CÁLCULO (DO CÓDIGO ANTIGO) ---
+# --- LÓGICA DE CÁLCULO ---
 def calcular_precos_papel(descricao, preco_total):
     desc_minus = descricao.lower()
     match_leve = re.search(r'leve\s*(\d+)', desc_minus)
@@ -226,12 +227,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
-termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
+termo_input = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
-if termo:
+if termo_input:
     col1, col2 = st.columns(2)
-    termos_busca = gerar_formas_variantes(remover_acentos(termo))
-    palavras_chave = remover_acentos(termo).split()
+    termos_busca = gerar_formas_variantes(remover_acentos(termo_input))
+    # LISTA DE PALAVRAS CHAVE SEM ACENTO PARA FILTRAGEM
+    palavras_chave = remover_acentos(termo_input).split()
 
     with st.spinner("🔍 Buscando nos mercados..."):
         # --- PROCESSAMENTO SHIBATA ---
@@ -246,27 +248,31 @@ if termo:
             pid = p.get('id')
             if pid and pid not in vistos_shibata and p.get("disponivel", True):
                 vistos_shibata.add(pid)
-                desc = p.get('descricao', '')
-                if all(k in remover_acentos(desc) for k in palavras_chave):
+                desc_original = p.get('descricao', '')
+                # AJUSTE: Normaliza a descrição do produto antes de comparar
+                desc_normalizada = remover_acentos(desc_original)
+                
+                # FILTRAGEM FLEXÍVEL: Todas as palavras digitadas devem estar na descrição normalizada
+                if all(k in desc_normalizada for k in palavras_chave):
                     oferta = p.get('oferta') or {}
                     preco_oferta = oferta.get('preco_oferta')
                     preco_base = p.get('preco') or 0
                     preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
                     
-                    p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
+                    p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc_original)}"
                     
                     unidade_sigla = p.get('unidade_sigla')
                     if unidade_sigla and unidade_sigla.lower() == "grande": unidade_sigla = None
                     p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), unidade_sigla)
                     p['preco_final'] = preco_final
                     
-                    # Lógica de ordenação (sort_val) baseada na unidade ou folha
-                    val_metro, _ = calcular_precos_papel(desc, preco_final)
-                    _, val_folha = calcular_preco_papel_toalha(desc, preco_final)
-                    val_unidade, _ = calcular_preco_unidade(desc, preco_final)
+                    val_metro, _ = calcular_precos_papel(desc_original, preco_final)
+                    _, val_folha = calcular_preco_papel_toalha(desc_original, preco_final)
+                    val_unidade, _ = calcular_preco_unidade(desc_original, preco_final)
                     
-                    if 'papel toalha' in remover_acentos(termo).lower() and val_folha: p['sort_val'] = val_folha
-                    elif 'papel higienico' in remover_acentos(termo).lower() and val_metro: p['sort_val'] = val_metro
+                    termo_normalizado = remover_acentos(termo_input).lower()
+                    if 'papel toalha' in termo_normalizado and val_folha: p['sort_val'] = val_folha
+                    elif 'papel higienico' in termo_normalizado and val_metro: p['sort_val'] = val_metro
                     else: p['sort_val'] = val_unidade or preco_final
                     
                     shibata_final.append(p)
@@ -283,7 +289,10 @@ if termo:
             if sku and sku not in vistos_nagumo:
                 vistos_nagumo.add(sku)
                 nome, desc = p.get('name', ''), p.get('description', '')
-                if all(k in remover_acentos(f"{nome} {desc}") for k in palavras_chave):
+                # AJUSTE: Normaliza o nome e descrição do Nagumo antes de comparar
+                texto_nagumo_normalizado = remover_acentos(f"{nome} {desc}")
+                
+                if all(k in texto_nagumo_normalizado for k in palavras_chave):
                     promo = p.get('promotion') or {}
                     cond = promo.get('conditions') or []
                     preco_normal = p.get('price', 0)
@@ -314,14 +323,12 @@ if termo:
         for p in shibata_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
             
-            # --- Lógica de UI do Código Antigo (Shibata) ---
             descricao = p.get('descricao', '')
             descricao_modificada = descricao
             preco_info_extra = ""
             preco_total = p['preco_final']
             preco_formatado = p['preco_str']
 
-            # Extração de unidade diretamente do preço formatado (/0,15kg)
             match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_formatado.lower())
             if match:
                 try:
@@ -332,12 +339,10 @@ if termo:
                     if q > 0: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / q:.2f}/{u}</div>"
                 except: pass
 
-            # Tags de cor para Papel Higiênico
             if 'papel higienico' in remover_acentos(descricao):
                 descricao_modificada = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", descricao_modificada, flags=re.IGNORECASE)
                 descricao_modificada = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", descricao_modificada, flags=re.IGNORECASE)
 
-            # Preço por folha (papel toalha) e Preço por metro (papel higiênico)
             total_folhas, preco_por_folha = calcular_preco_papel_toalha(descricao, preco_total)
             if total_folhas and preco_por_folha:
                 descricao_modificada += f" <span style='color:gray;'>({total_folhas} folhas)</span>"
@@ -350,7 +355,6 @@ if termo:
                     _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
                     if preco_por_unidade_str: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
 
-            # Preço Ovos / Dúzia
             if 'ovo' in remover_acentos(descricao).lower():
                 match_ovo = re.search(r'(\d+)\s*(unidades|un|ovos|c/|com)', descricao.lower())
                 if match_ovo and int(match_ovo.group(1)) > 0:
@@ -358,7 +362,6 @@ if termo:
                 elif re.search(r'1\s*d[uú]zia', descricao.lower()):
                     preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / 12:.2f}/unidade (dúzia)</div>"
 
-            # Formatação de Desconto (Vermelho e Riscado)
             oferta = p.get('oferta') or {}
             if p.get('em_oferta') and oferta.get('preco_oferta') and oferta.get('preco_antigo'):
                 preco_antigo_val = float(oferta.get('preco_antigo'))
@@ -399,7 +402,6 @@ if termo:
             imgs = p.get('photosUrl')
             img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
             
-            # --- Lógica de UI do Código Antigo (Nagumo) ---
             titulo = p['name']
             texto_completo = p['name'] + " " + p.get('description', '')
             
@@ -411,7 +413,6 @@ if termo:
                 titulo = re.sub(r"(folha simples)", r"<span style='color:red; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
                 titulo = re.sub(r"(folha dupla|folha tripla)", r"<span style='color:green; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
 
-            # Formatação de Desconto (Vermelho e Riscado)
             preco_normal = p['preco_normal']
             preco_final = p['preco_final']
             if preco_final < preco_normal:
@@ -436,7 +437,6 @@ if termo:
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # --- FORÇAR ROLAGEM PARA O TOPO ---
     components.html(
         f"""
         <script>
