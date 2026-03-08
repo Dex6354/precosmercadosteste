@@ -227,10 +227,12 @@ if termo:
                     else:
                         preco_html = f"<div><b>R$ {p['preco_final']:.2f}</b></div>"
                     
+                    # Cálculo de extra (sempre usando o preco_final da promoção ou base)
                     _, p_met = calcular_precos_papel(titulo, p['preco_final'])
                     _, p_fol = calcular_preco_papel_toalha(titulo, p['preco_final'])
                     _, p_uni = calcular_preco_unidade(titulo, p['preco_final'])
-                    extra = f"<div style='color:gray;'>{p_met if p_met else (f'R$ {p_fol:.3f}/folha' if p_fol else (p_uni if p_uni else ''))}</div>"
+                    extra_val = p_met if p_met else (f"R$ {p_fol:.3f}/folha" if p_fol else (p_uni if p_uni else ""))
+                    extra = f"<div style='color:gray;'>{extra_val}</div>"
                 else:
                     img = p.get('photosUrl')[0] if p.get('photosUrl') else DEFAULT_IMAGE_URL
                     titulo = p['name']
@@ -239,6 +241,7 @@ if termo:
                         preco_html = f"<div><b>R$ {p['preco_final']:.2f}</b> <span style='color:red;'>({off}% OFF)</span></div><div style='text-decoration:line-through; color:gray;'>R$ {p['preco_normal']:.2f}</div>"
                     else:
                         preco_html = f"<div><b>R$ {p['preco_final']:.2f}</b></div>"
+                    # No Nagumo o unit_label já é calculado com o preço final
                     extra = f"<div style='color:gray;'>{p['unit_label']}</div>"
 
                 if "papel higi" in remover_acentos(titulo):
