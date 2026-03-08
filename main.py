@@ -81,7 +81,6 @@ def calcular_preco_papel_toalha(descricao, preco_total):
     if folhas_por_unidade: return folhas_por_unidade, preco_total / folhas_por_unidade
     return None, None
 
-# --- LÓGICA NAGUMO ---
 def calcular_preco_unitario_nagumo(preco_valor, descricao, nome):
     texto_completo = f"{nome} {descricao}".lower()
     if "papel" in remover_acentos(texto_completo) and "toalha" in remover_acentos(texto_completo):
@@ -89,7 +88,6 @@ def calcular_preco_unitario_nagumo(preco_valor, descricao, nome):
         if match:
             total_folhas = int(match.group(1)) * int(match.group(3))
             return f"R$ {preco_valor / total_folhas:.3f}/folha"
-    
     if "papel higi" in texto_completo:
         m_rolos = re.search(r"(\d+)\s*(rolos?|un|unidades?)", texto_completo)
         m_metros = re.search(r"(\d+[.,]?\d*)\s*(m|metros?|mt)", texto_completo)
@@ -98,7 +96,6 @@ def calcular_preco_unitario_nagumo(preco_valor, descricao, nome):
                 rolos, metros = int(m_rolos.group(1)), float(m_metros.group(1).replace(',', '.'))
                 return f"R$ {preco_valor / (rolos * metros):.3f}/m"
             except: pass
-
     res_v, res_s = calcular_preco_unidade(texto_completo, preco_valor)
     return res_s if res_s else f"R$ {preco_valor:.2f}/un"
 
@@ -160,7 +157,7 @@ if termo:
     palavras_chave = remover_acentos(termo).split()
 
     with st.spinner("🔍 Buscando..."):
-        # SHIBATA
+        # LÓGICA SHIBATA
         raw_shibata = []
         with ThreadPoolExecutor(max_workers=8) as exe:
             fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 6)]
@@ -175,21 +172,18 @@ if termo:
                 desc = p.get('descricao', '')
                 if all(k in remover_acentos(desc) for k in palavras_chave):
                     oferta = p.get('oferta') or {}
-                    preco_final = float(oferta.get('preco_oferta')) if (p.get('em_oferta') and oferta.get('preco_oferta')) else float(p.get('preco') or 0)
-                    p['preco_final'] = preco_final
+                    p['preco_final'] = float(oferta.get('preco_oferta')) if (p.get('em_oferta') and oferta.get('preco_oferta')) else float(p.get('preco') or 0)
                     p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
-                    
-                    v_met, _ = calcular_precos_papel(desc, preco_final)
-                    _, v_fol = calcular_preco_papel_toalha(desc, preco_final)
-                    v_uni, _ = calcular_preco_unidade(desc, preco_final)
-                    
+                    v_met, _ = calcular_precos_papel(desc, p['preco_final'])
+                    _, v_fol = calcular_preco_papel_toalha(desc, p['preco_final'])
+                    v_uni, _ = calcular_preco_unidade(desc, p['preco_final'])
                     if 'papel toalha' in remover_acentos(termo) and v_fol: p['sort_val'] = v_fol
                     elif 'papel higienico' in remover_acentos(termo) and v_met: p['sort_val'] = v_met
-                    else: p['sort_val'] = v_uni or preco_final
+                    else: p['sort_val'] = v_uni or p['preco_final']
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort_val'] or 999)
 
-        # NAGUMO
+        # LÓGICA NAGUMO
         raw_nagumo = []
         for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
         nagumo_final = []
@@ -216,6 +210,11 @@ if termo:
         with col:
             st.markdown(f"<h5 style='text-align:center;'><img src='{logo}' width='80'/></h5>", unsafe_allow_html=True)
             for p in lista:
+                img = ""
+                titulo = ""
+                preco_html = ""
+                extra_label = ""
+
                 if mercado == "Shibata":
                     img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
                     titulo = p['descricao']
@@ -227,13 +226,13 @@ if termo:
                     else:
                         preco_html = f"<div><b>R$ {p['preco_final']:.2f}</b></div>"
                     
-                    # Cálculo de extra (sempre usando o preco_final da promoção ou base)
+                    # Cálculo extra para Shibata (sempre baseado no preço final)
                     _, p_met = calcular_precos_papel(titulo, p['preco_final'])
                     _, p_fol = calcular_preco_papel_toalha(titulo, p['preco_final'])
                     _, p_uni = calcular_preco_unidade(titulo, p['preco_final'])
-                    extra_val = p_met if p_met else (f"R$ {p_fol:.3f}/folha" if p_fol else (p_uni if p_uni else ""))
-                    extra = f"<div style='color:gray;'>{extra_val}</div>"
-                else:
+                    extra_label = p_met if p_met else (f"R$ {p_fol:.3f}/folha" if p_fol else (p_uni if p_uni else ""))
+
+                else: # Nagumo
                     img = p.get('photosUrl')[0] if p.get('photosUrl') else DEFAULT_IMAGE_URL
                     titulo = p['name']
                     if p['preco_final'] < p['preco_normal']:
@@ -241,9 +240,9 @@ if termo:
                         preco_html = f"<div><b>R$ {p['preco_final']:.2f}</b> <span style='color:red;'>({off}% OFF)</span></div><div style='text-decoration:line-through; color:gray;'>R$ {p['preco_normal']:.2f}</div>"
                     else:
                         preco_html = f"<div><b>R$ {p['preco_final']:.2f}</b></div>"
-                    # No Nagumo o unit_label já é calculado com o preço final
-                    extra = f"<div style='color:gray;'>{p['unit_label']}</div>"
+                    extra_label = p['unit_label']
 
+                # Formatação de papel higiênico
                 if "papel higi" in remover_acentos(titulo):
                     titulo = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", titulo, flags=re.IGNORECASE)
                     titulo = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", titulo, flags=re.IGNORECASE)
@@ -257,7 +256,7 @@ if termo:
                         <div class='product-info'>
                             <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{titulo}</b></a>
                             {preco_html}
-                            {extra}
+                            <div style='color:gray;'>{extra_label}</div>
                         </div>
                     </div><hr class='product-separator'/>
                 """, unsafe_allow_html=True)
