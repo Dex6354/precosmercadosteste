@@ -169,11 +169,6 @@ st.markdown("""
         header[data-testid="stHeader"] {
             display: none;
         }
-        /* Estilização para centralizar o botão de voltar */
-        .stButton button {
-            display: block;
-            margin: 0 auto;
-        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -228,6 +223,7 @@ if termo:
                     cond = promo.get('conditions') or []
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
                     
+                    # LOGICA ATUALIZADA NAGUMO:
                     p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
                     
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
@@ -298,25 +294,11 @@ if termo:
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # --- BOTÃO VOLTAR AO TOPO (FORA DAS COLUNAS) ---
-    if st.button("⬆️ Voltar ao Topo", key="btn_top"):
-        # Quando o botão é clicado, o Streamlit recarrega o componente HTML abaixo
-        # que executa o script de rolagem imediatamente.
-        components.html(
-            """
-            <script>
-                const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
-                cols.forEach(col => col.scrollTo({top: 0, behavior: 'smooth'}));
-            </script>
-            """,
-            height=0,
-            width=0
-        )
-
-    # --- FORÇAR ROLAGEM INICIAL AO PESQUISAR ---
+    # --- FORÇAR ROLAGEM PARA O TOPO ---
     components.html(
         f"""
         <script>
+            // A variável de tempo {time.time()} garante que o Streamlit recarregue o JS a cada busca
             const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
             cols.forEach(col => col.scrollTop = 0);
         </script>
