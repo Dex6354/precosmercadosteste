@@ -38,16 +38,43 @@ def slugify(text):
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-def calcular_preco_unidade_shibata(descricao, preco_total):
+# --- LÓGICA DE CÁLCULO (RESTAURADA DO CÓDIGO ANTIGO) ---
+def calcular_precos_papel(descricao, preco_total):
+    desc_minus = descricao.lower()
+    match_leve = re.search(r'leve\s*(\d+)', desc_minus)
+    q_rolos = int(match_leve.group(1)) if match_leve else (
+        int(m.group(1)) if (m := re.search(r'(\d+)\s*(rolos|unidades|uni|pacotes|pacote)', desc_minus)) else None
+    )
+    match_metros = re.search(r'(\d+(?:[\.,]\d+)?)\s*m(?:etros)?', desc_minus)
+    m_rolos = float(match_metros.group(1).replace(',', '.')) if match_metros else None
+    if q_rolos and m_rolos:
+        preco_por_metro = preco_total / (q_rolos * m_rolos)
+        return preco_por_metro, f"R$ {preco_por_metro:.3f}".replace('.', ',') + "/m"
+    return None, None
+
+def calcular_preco_unidade(descricao, preco_total):
     desc_minus = remover_acentos(descricao)
     m_kg = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo)', desc_minus)
     if m_kg:
         peso = float(m_kg.group(1).replace(',', '.'))
-        return preco_total / peso, f"R$ {preco_total / peso:.2f}/kg"
+        return preco_total / peso, f"R$ {preco_total / peso:.2f}".replace('.', ',') + "/kg"
     m_g = re.search(r'(\d+(?:[\.,]\d+)?)\s*(g|gramas?)', desc_minus)
     if m_g:
         peso = float(m_g.group(1).replace(',', '.')) / 1000
-        return preco_total / peso, f"R$ {preco_total / peso:.2f}/kg"
+        return preco_total / peso, f"R$ {preco_total / peso:.2f}".replace('.', ',') + "/kg"
+    match_l = re.search(r'(\d+(?:[\.,]\d+)?)\s*(l|litros?)', desc_minus)
+    if match_l:
+        litros = float(match_l.group(1).replace(',', '.'))
+        return preco_total / litros, f"R$ {preco_total / litros:.2f}".replace('.', ',') + "/L"
+    return None, None
+
+def calcular_preco_papel_toalha(descricao, preco_total):
+    desc = descricao.lower()
+    qtd_unidades = int(m.group(1)) if (m := re.search(r'(\d+)\s*(rolos|unidades|pacotes|pacote|kits?)', desc)) else None
+    folhas_por_unidade = int(m.group(1)) if (m := re.search(r'(\d+)\s*(folhas|toalhas)(?:\s*cada)?', desc)) else None
+    if qtd_unidades and folhas_por_unidade:
+        total_folhas = qtd_unidades * folhas_por_unidade
+        return total_folhas, preco_total / total_folhas if total_folhas else None
     return None, None
 
 def formatar_preco_shibata(preco_total, qtd, unidade):
@@ -56,40 +83,6 @@ def formatar_preco_shibata(preco_total, qtd, unidade):
     if qtd and qtd != 1:
         return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{str(qtd).replace('.', ',')}{u}"
     return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{u}"
-
-# --- LÓGICA NAGUMO (UTILITÁRIOS) ---
-def contem_papel_toalha(texto):
-    texto = remover_acentos(texto.lower())
-    return "papel" in texto and "toalha" in texto
-
-def extrair_info_papel_toalha(nome, descricao):
-    texto_nome = remover_acentos(nome.lower())
-    texto_completo = f"{texto_nome} {remover_acentos(descricao.lower())}"
-    for texto in [texto_nome, texto_completo]:
-        match = re.search(r'(\d+)\s*(un|unidades?|rolos?)\s*.*?(\d+)\s*(folhas|toalhas)', texto)
-        if match:
-            rolos, folhas_por_rolo = int(match.group(1)), int(match.group(3))
-            return rolos, folhas_por_rolo, rolos * folhas_por_rolo, f"{rolos} {match.group(2)}, {folhas_por_rolo} {match.group(4)}"
-    return None, None, None, None
-
-def calcular_preco_unitario_nagumo(preco_valor, descricao, nome, unidade_api=None):
-    texto_completo = f"{nome} {descricao}".lower()
-    fontes = [descricao.lower(), nome.lower()]
-    for fonte in fontes:
-        match_kg = re.search(r"(\d+[.,]?\d*)\s*(kg|quilo)", fonte)
-        if match_kg and float(match_kg.group(1).replace(',', '.')) > 0:
-            val = float(match_kg.group(1).replace(',', '.'))
-            return f"R$ {preco_valor / val:.2f}/kg", preco_valor / val
-        match_g = re.search(r"(\d+[.,]?\d*)\s*(g|gramas?)", fonte)
-        if match_g and float(match_g.group(1).replace(',', '.')) > 0:
-            val = float(match_g.group(1).replace(',', '.')) / 1000
-            return f"R$ {preco_valor / val:.2f}/kg", preco_valor / val
-    return f"R$ {preco_valor:.2f}/{unidade_api or 'un'}", preco_valor
-
-def extrair_valor_unitario(preco_unitario):
-    match = re.search(r"R\$ (\d+[.,]?\d*)", preco_unitario)
-    if match: return float(match.group(1).replace(',', '.'))
-    return float('inf')
 
 # --- REQUISIÇÕES ---
 def buscar_pagina_shibata(termo, pagina):
@@ -106,7 +99,7 @@ def buscar_nagumo(term):
     payload = {
         "operationName": "SearchProducts",
         "variables": {"searchProductsInput": {"clientId": "NAGUMO", "storeReference": "22", "currentPage": 1, "pageSize": 50, "search": [{"query": term}], "filters": {}}},
-        "query": "query SearchProducts($searchProductsInput: SearchProductsInput!) { searchProducts(searchProductsInput: $searchProductsInput) { products { name price photosUrl sku stock description unit promotion { isActive conditions { price } } } } }"
+        "query": "query SearchProducts($searchProductsInput: SearchProductsInput!) { searchProducts(searchProductsInput: $searchProductsInput) { products { name price photosUrl sku stock description unit promotion { isActive conditions { price priceBeforeTaxes } } } } }"
     }
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=10)
@@ -130,7 +123,6 @@ st.markdown("""
         [data-testid="stColumn"] {
             overflow-y: auto; max-height: 90vh; padding: 10px; border: 1px solid #f0f2f6; border-radius: 8px;
             max-width: 480px; margin-left: auto; margin-right: auto; background: transparent;
-            scrollbar-width: thin; scrollbar-color: gray transparent;
         }
         header[data-testid="stHeader"] { display: none; }
     </style>
@@ -145,7 +137,7 @@ if termo:
     palavras_chave = remover_acentos(termo).split()
 
     with st.spinner("🔍 Buscando nos mercados..."):
-        # --- PROCESSAMENTO SHIBATA (LÓGICA DO CÓDIGO NOVO) ---
+        # --- PROCESSAMENTO SHIBATA ---
         raw_shibata = []
         with ThreadPoolExecutor(max_workers=8) as exe:
             fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 6)]
@@ -155,89 +147,131 @@ if termo:
         shibata_final = []
         for p in raw_shibata:
             pid = p.get('id')
-            if pid and pid not in vistos_shibata:
+            if pid and pid not in vistos_shibata and p.get("disponivel", True):
                 vistos_shibata.add(pid)
                 desc = p.get('descricao', '')
                 if all(k in remover_acentos(desc) for k in palavras_chave):
-                    oferta = p.get('oferta')
-                    preco_oferta = oferta.get('preco_oferta') if (isinstance(oferta, dict)) else None
+                    oferta = p.get('oferta') or {}
+                    preco_oferta = oferta.get('preco_oferta')
                     preco_base = p.get('preco') or 0
                     preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
                     
                     p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
                     p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
-                    p['sort_val'], unit_info = calcular_preco_unidade_shibata(desc, preco_final)
-                    p['unit_label'] = unit_info if unit_info else ""
                     p['preco_final_val'] = preco_final
+                    
+                    # Lógica de Ordenação Inteligente
+                    val_metro, _ = calcular_precos_papel(desc, preco_final)
+                    _, val_folha = calcular_preco_papel_toalha(desc, preco_final)
+                    val_unidade, _ = calcular_preco_unidade(desc, preco_final)
+                    
+                    if 'papel toalha' in remover_acentos(termo) and val_folha: p['sort_val'] = val_folha
+                    elif 'papel higienico' in remover_acentos(termo) and val_metro: p['sort_val'] = val_metro
+                    else: p['sort_val'] = val_unidade or preco_final
+                    
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort_val'] or 999)
 
-        # --- PROCESSAMENTO NAGUMO ---
-        raw_nagumo = []
-        for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
-        vistos_nagumo = set()
-        nagumo_final = []
-        for p in raw_nagumo:
-            sku = p.get('sku')
-            if sku and sku not in vistos_nagumo:
-                vistos_nagumo.add(sku)
-                nome, desc = p.get('name', ''), p.get('description', '')
-                if all(k in remover_acentos(f"{nome} {desc}") for k in palavras_chave):
-                    promo = p.get('promotion') or {}
-                    cond = promo.get('conditions') or []
-                    preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
-                    p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
-                    label, sort_v = calcular_preco_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
-                    p['unit_label'] = label
-                    p['sort_val'] = sort_v
-                    p['preco_final'] = preco_final
-                    nagumo_final.append(p)
-        nagumo_final = sorted(nagumo_final, key=lambda x: x['sort_val'] or 999)
-
     # --- EXIBIÇÃO COLUNA 1 (SHIBATA) ---
     with col1:
-        st.markdown(f"""<h5 style="display: flex; align-items: center; justify-content: center;"><img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="background-color: white; border-radius: 4px; padding: 3px;"/></h5>""", unsafe_allow_html=True)
+        st.markdown(f"""<h5 style="text-align: center;"><img src="{LOGO_SHIBATA_URL}" width="80" style="background-color: white; border-radius: 4px; padding: 3px;"/></h5>""", unsafe_allow_html=True)
         st.markdown(f"<small>🔎 {len(shibata_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
         
         for p in shibata_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
+            descricao = p.get('descricao', '')
+            desc_mod = descricao
+            preco_info_extra = ""
+            preco_total = p['preco_final_val']
+            preco_formatado = p['preco_str']
+
+            # 1. Cores para Papel Higiênico
+            if 'papel higienico' in remover_acentos(descricao):
+                desc_mod = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", desc_mod, flags=re.IGNORECASE)
+                desc_mod = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", desc_mod, flags=re.IGNORECASE)
+
+            # 2. Cálculos Unitários (Metro/Folha/Unidade)
+            t_folhas, p_folha = calcular_preco_papel_toalha(descricao, preco_total)
+            if t_folhas and p_folha:
+                desc_mod += f" <span style='color:gray;'>({t_folhas} folhas)</span>"
+                preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {p_folha:.3f}/folha</div>"
+            else:
+                _, p_metro_str = calcular_precos_papel(descricao, preco_total)
+                if p_metro_str: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{p_metro_str}</div>"
+                else:
+                    _, p_un_str = calcular_preco_unidade(descricao, preco_total)
+                    if p_un_str: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{p_un_str}</div>"
+
+            # 3. Lógica de Ovos
+            if 'ovo' in remover_acentos(descricao):
+                m_ovo = re.search(r'(\d+)\s*(unidades|un|ovos|c/|com)', descricao.lower())
+                if m_ovo and int(m_ovo.group(1)) > 0:
+                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / int(m_ovo.group(1)):.2f}/un</div>"
+
+            # 4. Layout de Desconto
+            oferta = p.get('oferta') or {}
+            if p.get('em_oferta') and oferta.get('preco_antigo'):
+                p_antigo = float(oferta.get('preco_antigo'))
+                desc_perc = round(100 * (p_antigo - preco_total) / p_antigo) if p_antigo else 0
+                preco_html = f"<div><b>{preco_formatado}</b> <span style='color:red;font-weight: bold;'>({desc_perc}% OFF)</span></div><div><span style='color:gray; text-decoration: line-through;'>R$ {p_antigo:.2f}</span></div>"
+            else:
+                preco_html = f"<div><b>{preco_formatado}</b></div>"
+
             st.markdown(f"""
                 <div class='product-container'>
                     <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
-                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; display: block;'/>
-                        <img src='{LOGO_SHIBATA_URL}' width='80' style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
+                        <img src='{img}' width='80' style='background-color: white; border-radius: 6px 6px 0 0; display: block;'/>
+                        <img src='{LOGO_SHIBATA_URL}' width='80' style='background-color: white; display: block; border-top: 1.5px solid black; border-radius: 0 0 4px 4px; padding: 3px;'/>
                     </a>
                     <div class='product-info'>
-                        <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
-                        <div><b>{p['preco_str']}</b></div>
-                        <div style='color:gray; font-size:0.75em;'>{p['unit_label']}</div>
+                        <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{desc_mod}</b></a></div>
+                        <div style='font-size:0.85em;'>{preco_html}</div>
+                        <div style='font-size:0.85em;'>{preco_info_extra}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
+    # --- COLUNA 2 (NAGUMO) ---
     with col2:
-        st.markdown(f"""<h5 style="display: flex; align-items: center; justify-content: center;"><img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="border-radius: 6px; border: 1.5px solid white; padding: 0px;"/></h5>""", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(nagumo_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        st.markdown(f"""<h5 style="text-align: center;"><img src="{LOGO_NAGUMO_URL}" width="80" style="border-radius: 6px; border: 1.5px solid white;"/></h5>""", unsafe_allow_html=True)
+        raw_nagumo = []
+        for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
+        vistos_n = set(); nagumo_f = []
+        for n in raw_nagumo:
+            sku = n.get('sku')
+            if sku and sku not in vistos_n:
+                vistos_n.add(sku); nome = n.get('name', '')
+                if all(k in remover_acentos(nome) for k in palavras_chave):
+                    promo = n.get('promotion') or {}
+                    cond = promo.get('conditions') or []
+                    p_normal = n.get('price', 0)
+                    p_final = cond[0].get('price') if (promo.get('isActive') and cond) else p_normal
+                    n['preco_final'] = p_final; n['preco_normal'] = p_normal
+                    n['url_final'] = f"https://www.nagumo.com.br/p/{slugify(nome)}-{sku}.html"
+                    nagumo_f.append(n)
         
-        for p in nagumo_final:
-            imgs = p.get('photosUrl')
-            img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
+        for n in sorted(nagumo_f, key=lambda x: x['preco_final']):
+            img_n = n.get('photosUrl')[0] if n.get('photosUrl') else DEFAULT_IMAGE_URL
+            titulo = n['name']
+            if 'papel higienico' in remover_acentos(titulo):
+                titulo = re.sub(r"(folha simples)", r"<span style='color:red; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
+                titulo = re.sub(r"(folha dupla|folha tripla)", r"<span style='color:green; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
+
+            p_n_html = f"<b>R$ {n['preco_final']:.2f}</b>"
+            if n['preco_final'] < n['preco_normal']:
+                desc_n = round(100 * (n['preco_normal'] - n['preco_final']) / n['preco_normal'])
+                p_n_html = f"<b>R$ {n['preco_final']:.2f}</b> <span style='color:red;'>({desc_n}% OFF)</span><br><span style='text-decoration:line-through;color:gray;'>R$ {n['preco_normal']:.2f}</span>"
+
             st.markdown(f"""
-                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
-                    <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
-                        <img src="{img}" width="80" style="background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; display: block;"/>
-                        <img src="{LOGO_NAGUMO_URL}" width="80" style="border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
-                    </a>
-                    <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
-                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
-                        <span style='font-weight: bold; font-size: 1rem;'>R$ {p['preco_final']:.2f}</span><br>
-                        <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{p['unit_label']}</div>
+                <div class='product-container'>
+                    <a href='{n['url_final']}' target='_blank' class='product-image'><img src='{img_n}' width='80'/><img src='{LOGO_NAGUMO_URL}' width='80' style='border:1px solid white;'/></a>
+                    <div class='product-info'>
+                        <a href='{n['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{titulo}</b></a><br>
+                        <div style='font-size:0.85em;'>{p_n_html}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # Rolar para o topo
-    components.html(f"<script>const cols = window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]'); cols.forEach(col => col.scrollTop = 0);</script>", height=0)
+    components.html("<script>const cols = window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]'); cols.forEach(col => col.scrollTop = 0);</script>", height=0)
