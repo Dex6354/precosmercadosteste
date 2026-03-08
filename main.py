@@ -4,7 +4,7 @@ import unicodedata
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Configurações para Shibata
+# --- CONFIGURAÇÕES E CONSTANTES ---
 TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
 ORG_ID = "161"
 HEADERS_SHIBATA = {
@@ -19,7 +19,7 @@ LOGO_SHIBATA_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-sh
 LOGO_NAGUMO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
-# --- Funções Utilitárias ---
+# --- FUNÇÕES UTILITÁRIAS ---
 def remover_acentos(texto):
     if not texto: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
@@ -29,7 +29,7 @@ def gerar_formas_variantes(termo):
     if termo.endswith("s"): variantes.add(termo[:-1])
     else: variantes.add(termo + "s")
     return list(variantes)
-    
+
 def slugify(text):
     text = remover_acentos(text)
     text = re.sub(r'[^a-z0-9\s-]', '', text).strip()
@@ -38,12 +38,10 @@ def slugify(text):
 
 def calcular_preco_unidade(descricao, preco_total):
     desc_minus = remover_acentos(descricao)
-    # Busca KG
     m_kg = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo)', desc_minus)
     if m_kg:
         peso = float(m_kg.group(1).replace(',', '.'))
         return preco_total / peso, f"R$ {preco_total / peso:.2f}/kg"
-    # Busca G
     m_g = re.search(r'(\d+(?:[\.,]\d+)?)\s*(g|gramas?)', desc_minus)
     if m_g:
         peso = float(m_g.group(1).replace(',', '.')) / 1000
@@ -57,7 +55,7 @@ def formatar_preco_shibata(preco_total, qtd, unidade):
         return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{str(qtd).replace('.', ',')}{u}"
     return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{u}"
 
-# --- Shibata ---
+# --- LÓGICA SHIBATA ---
 def buscar_pagina_shibata(termo, pagina):
     url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo}?page={pagina}"
     try:
@@ -67,7 +65,7 @@ def buscar_pagina_shibata(termo, pagina):
     except: pass
     return []
 
-# --- Nagumo ---
+# --- LÓGICA NAGUMO ---
 def buscar_nagumo(term):
     url = "https://nextgentheadless.instaleap.io/api/v3"
     headers = {"Content-Type": "application/json", "Origin": "https://www.nagumo.com", "User-Agent": "Mozilla/5.0"}
@@ -87,22 +85,40 @@ def calc_unitario_nagumo(preco, desc, nome, unit_api):
     if m_kg:
         val = float(m_kg.group(1).replace(',', '.'))
         if 'g' in m_kg.group(2) and 'kg' not in m_kg.group(2): val /= 1000
-        return f"R$ {preco/val:.2f}/kg"
-    return f"R$ {preco:.2f}/{unit_api or 'un'}"
+        if val > 0: return f"R$ {preco/val:.2f}/kg", preco/val
+    return f"R$ {preco:.2f}/{unit_api or 'un'}", preco
 
-# --- App ---
-st.set_page_config(page_title="Preços Mercados", layout="wide")
-st.markdown("<style>header{display:none!important;} [data-testid='stColumn']{overflow-y:auto; max-height:85vh; border:1px solid #eee; padding:10px;}</style>", unsafe_allow_html=True)
+# --- INTERFACE STREAMLIT ---
+st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
-termo = st.text_input("🔎 Produto:", "Banana").strip()
+st.markdown("""
+    <style>
+        .block-container { padding-top: 1rem; }
+        header[data-testid="stHeader"] { display: none; }
+        [data-testid="stColumn"] {
+            overflow-y: auto; max-height: 85vh; border: 1px solid #f0f2f6;
+            padding: 10px; border-radius: 8px; background: #fff;
+            scrollbar-width: thin;
+        }
+        .product-container { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 5px; }
+        .product-image-box { flex: 0 0 80px; text-decoration: none; }
+        .product-info { flex: 1; min-width: 0; word-break: break-word; }
+        .product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
+        img.main-img { border-radius: 6px 6px 0 0; display: block; width: 80px; }
+        img.badge-img { border-radius: 0 0 6px 6px; border-top: 1px solid #eee; display: block; width: 80px; padding: 2px; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
+termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
 if termo:
     col1, col2 = st.columns(2)
     termos_busca = gerar_formas_variantes(remover_acentos(termo))
     palavras_chave = remover_acentos(termo).split()
 
-    with st.spinner("Buscando..."):
-        # Processamento Shibata
+    with st.spinner("🔍 Buscando nos mercados..."):
+        # --- PROCESSAMENTO SHIBATA ---
         raw_shibata = []
         with ThreadPoolExecutor(max_workers=8) as exe:
             fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 6)]
@@ -111,24 +127,24 @@ if termo:
         vistos_shibata = set()
         shibata_final = []
         for p in raw_shibata:
-            if p.get('id') not in vistos_shibata:
-                vistos_shibata.add(p.get('id'))
+            pid = p.get('id')
+            if pid and pid not in vistos_shibata:
+                vistos_shibata.add(pid)
                 desc = p.get('descricao', '')
                 if all(k in remover_acentos(desc) for k in palavras_chave):
-                    # CORREÇÃO DO ERRO: Verificação segura da oferta
                     oferta = p.get('oferta')
-                    preco_oferta = oferta.get('preco_oferta') if (oferta and isinstance(oferta, dict)) else None
-                    
+                    preco_oferta = oferta.get('preco_oferta') if (isinstance(oferta, dict)) else None
                     preco_base = p.get('preco') or 0
                     preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
                     
-                    p['url'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
-                    p['preco_exibir'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
-                    p['sort_val'], _ = calcular_preco_unidade(desc, preco_final)
+                    p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
+                    p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
+                    p['sort_val'], unit_info = calcular_preco_unidade(desc, preco_final)
+                    p['unit_label'] = unit_info if unit_info else ""
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort_val'] or 999)
 
-        # Processamento Nagumo
+        # --- PROCESSAMENTO NAGUMO ---
         raw_nagumo = []
         for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
         
@@ -142,21 +158,56 @@ if termo:
                 if all(k in remover_acentos(f"{nome} {desc}") for k in palavras_chave):
                     promo = p.get('promotion') or {}
                     cond = promo.get('conditions') or []
-                    preco = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
-                    p['preco_f'] = preco
-                    p['url'] = f"https://www.nagumo.com/p/{sku}"
-                    p['unit_str'] = calc_unitario_nagumo(preco, desc, nome, p.get('unit'))
+                    preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
+                    
+                    p['url_final'] = f"https://www.nagumo.com/p/{sku}"
+                    label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
+                    p['unit_label'] = label
+                    p['sort_val'] = sort_v
+                    p['preco_final'] = preco_final
                     nagumo_final.append(p)
+        nagumo_final = sorted(nagumo_final, key=lambda x: x['sort_val'] or 999)
 
+    # --- EXIBIÇÃO COLUNA 1 (SHIBATA) ---
     with col1:
-        st.image(LOGO_SHIBATA_URL, width=80)
+        st.markdown(f"<div style='text-align:center'><img src='{LOGO_SHIBATA_URL}' width='80'></div>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(shibata_final)} produto(s)</small>", unsafe_allow_html=True)
         for p in shibata_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
-            st.markdown(f"<div style='display:flex;gap:10px;'><a href='{p['url']}' target='_blank'><img src='{img}' width='70'></a><div><a href='{p['url']}' style='color:black;text-decoration:none;'><b>{p['descricao']}</b></a><br><span style='font-size:1.1em;'>{p['preco_exibir']}</span></div></div><hr>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class="product-container">
+                    <a href="{p['url_final']}" target="_blank" class="product-image-box">
+                        <img src="{img}" class="main-img">
+                        <img src="{LOGO_SHIBATA_URL}" class="badge-img">
+                    </a>
+                    <div class="product-info">
+                        <a href="{p['url_final']}" target="_blank" style="text-decoration:none; color:black;"><b>{p['descricao']}</b></a><br>
+                        <span style="font-size:1.1rem; font-weight:bold;">{p['preco_str']}</span><br>
+                        <span style="color:gray; font-size:0.8rem;">{p['unit_label']}</span>
+                    </div>
+                </div>
+                <hr class="product-separator">
+            """, unsafe_allow_html=True)
 
+    # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
     with col2:
-        st.image(LOGO_NAGUMO_URL, width=80)
+        st.markdown(f"<div style='text-align:center'><img src='{LOGO_NAGUMO_URL}' width='80'></div>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(nagumo_final)} produto(s)</small>", unsafe_allow_html=True)
         for p in nagumo_final:
             imgs = p.get('photosUrl')
-            img = imgs[0] if (imgs and isinstance(imgs, list)) else DEFAULT_IMAGE_URL
-            st.markdown(f"<div style='display:flex;gap:10px;'><a href='{p['url']}' target='_blank'><img src='{img}' width='70'></a><div><a href='{p['url']}' style='color:black;text-decoration:none;'><b>{p['name']}</b></a><br><b>R$ {p['preco_f']:.2f}</b><br><span style='color:gray;'>{p['unit_str']}</span></div></div><hr>", unsafe_allow_html=True)
+            img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
+            st.markdown(f"""
+                <div class="product-container">
+                    <a href="{p['url_final']}" target="_blank" class="product-image-box">
+                        <img src="{img}" class="main-img">
+                        <img src="{LOGO_NAGUMO_URL}" class="badge-img">
+                    </a>
+                    <div class="product-info">
+                        <a href="{p['url_final']}" target="_blank" style="text-decoration:none; color:black;"><b>{p['name']}</b></a><br>
+                        <span style="font-size:1.1rem; font-weight:bold;">R$ {p['preco_final']:.2f}</span><br>
+                        <span style="color:gray; font-size:0.8rem;">{p['unit_label']}</span><br>
+                        <small style="color:#ccc;">Estoque: {p.get('stock', 0)}</small>
+                    </div>
+                </div>
+                <hr class="product-separator">
+            """, unsafe_allow_html=True)
