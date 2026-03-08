@@ -91,6 +91,7 @@ def calc_unitario_nagumo(preco, desc, nome, unit_api):
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
+# CSS + JavaScript para scroll automático ao topo
 st.markdown("""
     <style>
         .block-container { padding-top: 0rem; }
@@ -168,6 +169,19 @@ st.markdown("""
             display: none;
         }
     </style>
+    
+    <script>
+        // Função para scrollar colunas para o topo
+        function scrollToTop() {
+            const columns = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
+            columns.forEach(col => {
+                col.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        }
+        // Executa quando o DOM for alterado (Streamlit terminar de renderizar)
+        const observer = new MutationObserver(scrollToTop);
+        observer.observe(window.parent.document.body, { childList: true, subtree: true });
+    </script>
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
@@ -221,7 +235,6 @@ if termo:
                     cond = promo.get('conditions') or []
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
                     
-                    # LOGICA ATUALIZADA NAGUMO:
                     p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
                     
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
