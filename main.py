@@ -82,13 +82,6 @@ def calcular_preco_papel_toalha(descricao, preco_total):
     if folhas_por_unidade: return folhas_por_unidade, preco_total / folhas_por_unidade
     return None, None
 
-def formatar_preco_shibata(preco_total, qtd, unidade):
-    if not unidade: return f"R$ {preco_total:.2f}".replace('.', ',')
-    u = unidade.lower()
-    if qtd and qtd != 1:
-        return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{str(qtd).replace('.', ',')}{u}"
-    return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{u}"
-
 # --- LÓGICA NAGUMO ---
 def contem_papel_toalha(texto):
     texto = remover_acentos(texto.lower())
@@ -106,7 +99,7 @@ def calcular_preco_unitario_nagumo(preco_valor, descricao, nome, unidade_api=Non
     texto_completo = f"{nome} {descricao}".lower()
     if contem_papel_toalha(texto_completo):
         _, _, total_folhas, _ = extrair_info_papel_toalha(nome, descricao)
-        if total_folhas: return f"R$ {preco_valor / total_folhas:.3f}/folha"
+        if total_folhas: return f"R$ {preco_valor / total_folhas:.3f}".replace('.', ',') + "/folha"
     
     if "papel higi" in texto_completo:
         m_rolos = re.search(r"(\d+)\s*(rolos?|un|unidades?)", texto_completo)
@@ -115,13 +108,13 @@ def calcular_preco_unitario_nagumo(preco_valor, descricao, nome, unidade_api=Non
             try:
                 rolos = int(m_rolos.group(1))
                 metros = float(m_metros.group(1).replace(',', '.'))
-                return f"R$ {preco_valor / (rolos * metros):.3f}/m"
+                return f"R$ {preco_valor / (rolos * metros):.3f}".replace('.', ',') + "/m"
             except: pass
 
     # Genérico (kg, L, un)
     res_v, res_s = calcular_preco_unidade(texto_completo, preco_valor)
     if res_s: return res_s
-    return f"R$ {preco_valor:.2f}/un".replace('.', ',')
+    return f"R$ {preco_valor:.2f}".replace('.', ',') + "/un"
 
 def extrair_valor_unitario(preco_unitario):
     match = re.search(r"R\$ (\d+[.,]?\d*)", preco_unitario)
@@ -203,14 +196,38 @@ if termo:
                     p['preco_final'] = preco_final
                     p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
                     
-                    # Cálculo de Unidade
+                    # Cálculo de Unidade e Ordenação Corrigida (usando fracionamento da API)
                     val_metro, _ = calcular_precos_papel(desc, preco_final)
                     _, val_folha = calcular_preco_papel_toalha(desc, preco_final)
                     val_unidade, _ = calcular_preco_unidade(desc, preco_final)
                     
-                    if 'papel toalha' in remover_acentos(termo) and val_folha: p['sort_val'] = val_folha
-                    elif 'papel higienico' in remover_acentos(termo) and val_metro: p['sort_val'] = val_metro
-                    else: p['sort_val'] = val_unidade or preco_final
+                    if 'papel toalha' in remover_acentos(termo) and val_folha: 
+                        p['sort_val'] = val_folha
+                    elif 'papel higienico' in remover_acentos(termo) and val_metro: 
+                        p['sort_val'] = val_metro
+                    else: 
+                        if val_unidade:
+                            p['sort_val'] = val_unidade
+                        else:
+                            # Tenta puxar a unidade e passo direto da API do Shibata (ex: maçã 1 Unidade, passo 0.2kg)
+                            passo_raw = str(p.get('passo') or '1').replace(',', '.')
+                            try:
+                                passo_api = float(passo_raw)
+                            except:
+                                passo_api = 1.0
+                                
+                            unidade_api = str(p.get('unidade') or '').lower()
+                            
+                            if unidade_api == 'kg' and passo_api > 0:
+                                p['sort_val'] = preco_final / passo_api
+                            elif unidade_api in ['g', 'grama', 'gramas'] and passo_api > 0:
+                                p['sort_val'] = preco_final / (passo_api / 1000)
+                            elif unidade_api in ['l', 'litro', 'litros'] and passo_api > 0:
+                                p['sort_val'] = preco_final / passo_api
+                            elif unidade_api in ['ml', 'mililitro', 'mililitros'] and passo_api > 0:
+                                p['sort_val'] = preco_final / (passo_api / 1000)
+                            else:
+                                p['sort_val'] = preco_final
                     
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort_val'] or 999)
@@ -250,14 +267,17 @@ if termo:
             preco_total = p['preco_final']
             preco_info_extra = ""
             
-            # Formatação Desconto
+            # Formatação Desconto (Layout Original Mantido e Protegido)
+            preco_total_str = f"{preco_total:.2f}".replace('.', ',')
             oferta = p.get('oferta') or {}
+            
             if p.get('em_oferta') and oferta.get('preco_antigo'):
                 p_antigo = float(oferta.get('preco_antigo'))
                 desc_perc = round(100 * (p_antigo - preco_total) / p_antigo)
-                preco_html = f"<div><b>R$ {preco_total:.2f}</b> <span style='color:red;'>({desc_perc}% OFF)</span></div><div style='text-decoration:line-through; color:gray;'>R$ {p_antigo:.2f}</div>".replace('.', ',')
+                p_antigo_str = f"{p_antigo:.2f}".replace('.', ',')
+                preco_html = f"<div><b>R$ {preco_total_str}</b> <span style='color:red;'>({desc_perc}% OFF)</span></div><div style='text-decoration:line-through; color:gray;'>R$ {p_antigo_str}</div>"
             else:
-                preco_html = f"<div><b>R$ {preco_total:.2f}</b></div>".replace('.', ',')
+                preco_html = f"<div><b>R$ {preco_total_str}</b></div>"
 
             # Info extra (Papel, Ovos, kg, un, etc)
             if 'papel higienico' in remover_acentos(desc):
@@ -274,8 +294,29 @@ if termo:
                 if p_un: 
                     preco_info_extra = f"<div style='color:gray;'>{p_un}</div>"
                 else:
-                    # Fallback para exibir o preço por unidade (como no Nagumo)
-                    preco_info_extra = f"<div style='color:gray;'>R$ {f'{preco_total:.2f}'.replace('.', ',')}/un</div>"
+                    # Faz o cálculo correto dividindo pelo fracionamento ("passo") reportado pela API
+                    passo_raw = str(p.get('passo') or '1').replace(',', '.')
+                    try:
+                        passo_api = float(passo_raw)
+                    except:
+                        passo_api = 1.0
+                        
+                    unidade_api = str(p.get('unidade') or '').lower()
+                    
+                    if unidade_api == 'kg' and passo_api > 0:
+                        preco_kg = preco_total / passo_api
+                        preco_info_extra = f"<div style='color:gray;'>R$ {f'{preco_kg:.2f}'.replace('.', ',')}/kg</div>"
+                    elif unidade_api in ['g', 'grama', 'gramas'] and passo_api > 0:
+                        preco_kg = preco_total / (passo_api / 1000)
+                        preco_info_extra = f"<div style='color:gray;'>R$ {f'{preco_kg:.2f}'.replace('.', ',')}/kg</div>"
+                    elif unidade_api in ['l', 'litro', 'litros'] and passo_api > 0:
+                        preco_l = preco_total / passo_api
+                        preco_info_extra = f"<div style='color:gray;'>R$ {f'{preco_l:.2f}'.replace('.', ',')}/L</div>"
+                    elif unidade_api in ['ml', 'mililitro', 'mililitros'] and passo_api > 0:
+                        preco_l = preco_total / (passo_api / 1000)
+                        preco_info_extra = f"<div style='color:gray;'>R$ {f'{preco_l:.2f}'.replace('.', ',')}/L</div>"
+                    else:
+                        preco_info_extra = f"<div style='color:gray;'>R$ {preco_total_str}/un</div>"
 
             st.markdown(f"""
                 <div class='product-container'>
@@ -300,12 +341,15 @@ if termo:
                 titulo = re.sub(r"(folha simples)", r"<span style='color:red; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
                 titulo = re.sub(r"(folha dupla|folha tripla)", r"<span style='color:green; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
 
-            # Preço e Promoção
+            # Preço e Promoção (Layout Original Mantido e Protegido)
+            preco_final_str = f"{p['preco_final']:.2f}".replace('.', ',')
+            
             if p['preco_final'] < p['preco_normal']:
+                preco_normal_str = f"{p['preco_normal']:.2f}".replace('.', ',')
                 desc_perc = ((p['preco_normal'] - p['preco_final']) / p['preco_normal']) * 100
-                preco_html = f"<b>R$ {p['preco_final']:.2f}</b> <span style='color:red;'>({desc_perc:.0f}% OFF)</span><br><span style='text-decoration:line-through; color:gray;'>R$ {p['preco_normal']:.2f}</span>".replace('.', ',')
+                preco_html = f"<b>R$ {preco_final_str}</b> <span style='color:red;'>({desc_perc:.0f}% OFF)</span><br><span style='text-decoration:line-through; color:gray;'>R$ {preco_normal_str}</span>"
             else:
-                preco_html = f"<b>R$ {p['preco_final']:.2f}</b>".replace('.', ',')
+                preco_html = f"<b>R$ {preco_final_str}</b>"
 
             st.markdown(f"""
                 <div class='product-container'>
