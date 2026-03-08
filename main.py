@@ -221,7 +221,9 @@ if termo:
                     cond = promo.get('conditions') or []
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
                     
-                    p['url_final'] = f"https://www.nagumo.com/p/{sku}"
+                    # LOGICA ATUALIZADA NAGUMO:
+                    p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
+                    
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
                     p['unit_label'] = label
                     p['sort_val'] = sort_v
