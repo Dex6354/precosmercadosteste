@@ -114,32 +114,39 @@ st.markdown("""
             position: relative; 
         }
 
-        /* Botão FAB (Floating Action Button) fixo na coluna */
-        .fab-topo {
+        /* Botão flutuante REALMENTE fixo no canto inferior direito da coluna */
+        .fab-container {
             position: -webkit-sticky;
             position: sticky;
-            bottom: 10px; /* Distância do fundo da área visível */
-            left: 100%;   /* Empurra para a direita */
-            margin-top: -50px; /* Puxa para cima para sobrepor o conteúdo */
+            top: 75vh; /* Fixa a posição vertical na área visível */
             z-index: 9999;
-            background-color: #ff4b4b; /* Cor de destaque */
+            height: 0;
+            display: flex;
+            justify-content: flex-end;
+            pointer-events: none; /* Não bloqueia cliques nos itens por baixo */
+        }
+
+        .fab-topo {
+            pointer-events: auto; /* Permite clicar no botão */
+            background-color: #ff4b4b;
             color: white !important;
-            width: 40px;
-            height: 40px;
+            width: 45px;
+            height: 45px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
             text-decoration: none;
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
-            box-shadow: 0px 4px 8px rgba(0,0,0,0.3);
-            border: none;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.4);
+            border: 2px solid white;
+            transition: transform 0.2s;
         }
 
         .fab-topo:hover {
-            background-color: #d43f3f;
             transform: scale(1.1);
+            background-color: #d43f3f;
         }
 
         .product-container { display: flex; align-items: center; gap: 10px; }
@@ -203,8 +210,8 @@ if termo:
         st.markdown("<div id='top_shibata'></div>", unsafe_allow_html=True)
         st.markdown(f"<center><img src='{LOGO_SHIBATA_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></center>", unsafe_allow_html=True)
         if shibata_final:
-            # Botão FAB sobrepondo o conteúdo
-            st.markdown("<a href='#top_shibata' class='fab-topo'>↑</a>", unsafe_allow_html=True)
+            # Container do botão flutuante (Antes dos itens para "ancorar" na tela)
+            st.markdown("<div class='fab-container'><a href='#top_shibata' class='fab-topo'>↑</a></div>", unsafe_allow_html=True)
             for p in shibata_final:
                 img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
                 st.markdown(f"""
@@ -222,8 +229,8 @@ if termo:
         st.markdown("<div id='top_nagumo'></div>", unsafe_allow_html=True)
         st.markdown(f"<center><img src='{LOGO_NAGUMO_URL}' width='80' style='border:1px solid white; border-radius:4px;'/></center>", unsafe_allow_html=True)
         if nagumo_final:
-            # Botão FAB sobrepondo o conteúdo
-            st.markdown("<a href='#top_nagumo' class='fab-topo'>↑</a>", unsafe_allow_html=True)
+            # Container do botão flutuante
+            st.markdown("<div class='fab-container'><a href='#top_nagumo' class='fab-topo'>↑</a></div>", unsafe_allow_html=True)
             for p in nagumo_final:
                 imgs = p.get('photosUrl')
                 img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
