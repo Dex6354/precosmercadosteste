@@ -93,19 +93,80 @@ st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide
 
 st.markdown("""
     <style>
-        .block-container { padding-top: 1rem; }
-        header[data-testid="stHeader"] { display: none; }
-        [data-testid="stColumn"] {
-            overflow-y: auto; max-height: 85vh; border: 1px solid #f0f2f6;
-            padding: 10px; border-radius: 8px; background: #fff;
-            scrollbar-width: thin;
+        .block-container { padding-top: 0rem; }
+        footer {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        div, span, strong, small { font-size: 0.75rem !important; }
+        img { max-width: 100px; height: auto; }
+        .product-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .product-container { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 5px; }
-        .product-image-box { flex: 0 0 80px; text-decoration: none; }
-        .product-info { flex: 1; min-width: 0; word-break: break-word; }
-        .product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
-        img.main-img { border-radius: 6px 6px 0 0; display: block; width: 80px; }
-        img.badge-img { border-radius: 0 0 6px 6px; border-top: 1px solid #eee; display: block; width: 80px; padding: 2px; }
+        .product-image {
+            min-width: 80px;
+            max-width: 80px;
+            flex-shrink: 0;
+        }
+        .product-info {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        hr.product-separator {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 10px 0;
+        }
+        .info-cinza {
+            color: gray;
+            font-size: 0.8rem;
+        }
+        [data-testid="stColumn"] {
+            overflow-y: auto;
+            max-height: 90vh;
+            padding: 10px;
+            border: 1px solid #f0f2f6;
+            border-radius: 8px;
+            max-width: 480px;
+            margin-left: auto;
+            margin-right: auto;
+            background: transparent;
+            scrollbar-width: thin;
+            scrollbar-color: gray transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar {
+            width: 6px;
+            background: transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar-thumb {
+            background-color: gray;
+            border-radius: 3px;
+            border: 1px solid transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
+            background-color: white;
+        }
+        .block-container {
+            padding-right: 47px !important;
+        }
+        input[type="text"] {
+            font-size: 0.8rem !important;
+        }
+        .block-container {
+            padding-bottom: 15px !important;
+            margin-bottom: 15px !important;
+        }
+        [data-testid="stColumn"] {
+            margin-bottom: 20px;
+        }
+        header[data-testid="stHeader"] {
+            display: none;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -170,44 +231,61 @@ if termo:
 
     # --- EXIBIÇÃO COLUNA 1 (SHIBATA) ---
     with col1:
-        st.markdown(f"<div style='text-align:center'><img src='{LOGO_SHIBATA_URL}' width='80'></div>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(shibata_final)} produto(s)</small>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <h5 style="display: flex; align-items: center; justify-content: center;">
+            <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+            </h5>
+        """, unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(shibata_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        
+        if not shibata_final:
+            st.warning("Nenhum produto encontrado.")
+            
         for p in shibata_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
             st.markdown(f"""
-                <div class="product-container">
-                    <a href="{p['url_final']}" target="_blank" class="product-image-box">
-                        <img src="{img}" class="main-img">
-                        <img src="{LOGO_SHIBATA_URL}" class="badge-img">
+                <div class='product-container'>
+                    <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
+                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
+                        <img src='{LOGO_SHIBATA_URL}' width='80' 
+                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
                     </a>
-                    <div class="product-info">
-                        <a href="{p['url_final']}" target="_blank" style="text-decoration:none; color:black;"><b>{p['descricao']}</b></a><br>
-                        <span style="font-size:1.1rem; font-weight:bold;">{p['preco_str']}</span><br>
-                        <span style="color:gray; font-size:0.8rem;">{p['unit_label']}</span>
+                    <div class='product-info'>
+                        <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
+                        <div style='font-size:0.85em;'><div><b>{p['preco_str']}</b></div></div>
+                        <div style='font-size:0.85em;'><div style='color:gray; font-size:0.75em;'>{p['unit_label']}</div></div>
                     </div>
                 </div>
-                <hr class="product-separator">
+                <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
     # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
     with col2:
-        st.markdown(f"<div style='text-align:center'><img src='{LOGO_NAGUMO_URL}' width='80'></div>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(nagumo_final)} produto(s)</small>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <h5 style="display: flex; align-items: center; justify-content: center;">
+                <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
+            </h5>
+        """, unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(nagumo_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        
+        if not nagumo_final:
+            st.warning("Nenhum produto encontrado.")
+            
         for p in nagumo_final:
             imgs = p.get('photosUrl')
             img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
             st.markdown(f"""
-                <div class="product-container">
-                    <a href="{p['url_final']}" target="_blank" class="product-image-box">
-                        <img src="{img}" class="main-img">
-                        <img src="{LOGO_NAGUMO_URL}" class="badge-img">
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
+                    <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
+                        <img src="{img}" width="80" style="background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
+                        <img src="{LOGO_NAGUMO_URL}" width="80" style="border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
                     </a>
-                    <div class="product-info">
-                        <a href="{p['url_final']}" target="_blank" style="text-decoration:none; color:black;"><b>{p['name']}</b></a><br>
-                        <span style="font-size:1.1rem; font-weight:bold;">R$ {p['preco_final']:.2f}</span><br>
-                        <span style="color:gray; font-size:0.8rem;">{p['unit_label']}</span><br>
-                        <small style="color:#ccc;">Estoque: {p.get('stock', 0)}</small>
+                    <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
+                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
+                        <span style='font-weight: bold; font-size: 1rem;'>R$ {p['preco_final']:.2f}</span><br>
+                        <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{p['unit_label']}</div>
+                        <div style="color: gray; font-size: 0.8em;">Estoque: {p.get('stock', 0)}</div>
                     </div>
                 </div>
-                <hr class="product-separator">
+                <hr class='product-separator' />
             """, unsafe_allow_html=True)
