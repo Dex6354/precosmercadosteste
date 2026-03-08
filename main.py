@@ -99,7 +99,6 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         header[data-testid="stHeader"] { display: none; }
         
-        /* Ajuste do container da coluna para permitir sobreposição */
         [data-testid="stColumn"] {
             overflow-y: auto;
             max-height: 85vh;
@@ -112,34 +111,35 @@ st.markdown("""
             background: transparent;
             scrollbar-width: thin;
             scroll-behavior: smooth;
-            position: relative; /* Pai para o botão sticky */
+            position: relative; 
         }
 
-        /* Botão fixo que sobrepõe a lista */
-        .btn-topo-fixo {
+        /* Botão FAB (Floating Action Button) fixo na coluna */
+        .fab-topo {
             position: -webkit-sticky;
             position: sticky;
-            bottom: 10px;
-            left: 100%; /* Empurra para a direita */
+            bottom: 10px; /* Distância do fundo da área visível */
+            left: 100%;   /* Empurra para a direita */
+            margin-top: -50px; /* Puxa para cima para sobrepor o conteúdo */
             z-index: 9999;
-            background-color: #333;
+            background-color: #ff4b4b; /* Cor de destaque */
             color: white !important;
-            border: 1px solid #000;
-            padding: 8px 12px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border-radius: 50%;
             text-decoration: none;
-            font-size: 1.2rem !important;
-            box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
-            display: block;
-            width: fit-content;
-            margin-right: 0;
-            margin-left: auto;
-            opacity: 0.8;
+            font-size: 20px;
+            font-weight: bold;
+            box-shadow: 0px 4px 8px rgba(0,0,0,0.3);
+            border: none;
         }
 
-        .btn-topo-fixo:hover {
-            opacity: 1;
-            background-color: #000;
+        .fab-topo:hover {
+            background-color: #d43f3f;
+            transform: scale(1.1);
         }
 
         .product-container { display: flex; align-items: center; gap: 10px; }
@@ -157,7 +157,7 @@ if termo:
     palavras_chave = remover_acentos(termo).split()
 
     with st.spinner("🔍 Buscando..."):
-        # SHIBATA
+        # --- SHIBATA ---
         raw_shibata = []
         with ThreadPoolExecutor(max_workers=8) as exe:
             fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 6)]
@@ -178,7 +178,7 @@ if termo:
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort'] or 999)
 
-        # NAGUMO
+        # --- NAGUMO ---
         raw_nagumo = []
         for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
         nagumo_final = []
@@ -200,9 +200,11 @@ if termo:
 
     # COLUNA SHIBATA
     with col1:
-        st.markdown("<div id='top_s'></div>", unsafe_allow_html=True)
+        st.markdown("<div id='top_shibata'></div>", unsafe_allow_html=True)
         st.markdown(f"<center><img src='{LOGO_SHIBATA_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></center>", unsafe_allow_html=True)
         if shibata_final:
+            # Botão FAB sobrepondo o conteúdo
+            st.markdown("<a href='#top_shibata' class='fab-topo'>↑</a>", unsafe_allow_html=True)
             for p in shibata_final:
                 img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
                 st.markdown(f"""
@@ -213,14 +215,15 @@ if termo:
                     </div>
                 </div><hr class='product-separator'/>
                 """, unsafe_allow_html=True)
-            st.markdown("<a href='#top_s' class='btn-topo-fixo'>↑</a>", unsafe_allow_html=True)
         else: st.warning("Não encontrado.")
 
     # COLUNA NAGUMO
     with col2:
-        st.markdown("<div id='top_n'></div>", unsafe_allow_html=True)
+        st.markdown("<div id='top_nagumo'></div>", unsafe_allow_html=True)
         st.markdown(f"<center><img src='{LOGO_NAGUMO_URL}' width='80' style='border:1px solid white; border-radius:4px;'/></center>", unsafe_allow_html=True)
         if nagumo_final:
+            # Botão FAB sobrepondo o conteúdo
+            st.markdown("<a href='#top_nagumo' class='fab-topo'>↑</a>", unsafe_allow_html=True)
             for p in nagumo_final:
                 imgs = p.get('photosUrl')
                 img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
@@ -232,8 +235,7 @@ if termo:
                     </div>
                 </div><hr class='product-separator'/>
                 """, unsafe_allow_html=True)
-            st.markdown("<a href='#top_n' class='btn-topo-fixo'>↑</a>", unsafe_allow_html=True)
         else: st.warning("Não encontrado.")
 
-    # Reset Scroll
+    # Reset Scroll ao pesquisar
     components.html("<script>const cols = window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]'); cols.forEach(c => c.scrollTop = 0);</script>", height=0)
