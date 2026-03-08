@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 import requests
 import unicodedata
 import re
-import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURAÇÕES E CONSTANTES ---
@@ -25,16 +25,6 @@ DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-im
 def remover_acentos(texto):
     if not texto: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
-
-def gerar_formas_variantes(termo):
-    # Normaliza o termo base antes de gerar variantes
-    termo_limpo = remover_acentos(termo)
-    variantes = {termo_limpo}
-    if termo_limpo.endswith("s"): 
-        variantes.add(termo_limpo[:-1])
-    else: 
-        variantes.add(termo_limpo + "s")
-    return list(variantes)
 
 def slugify(text):
     text = remover_acentos(text)
@@ -178,7 +168,9 @@ def extrair_valor_unitario(preco_unitario):
 
 # --- REQUISIÇÕES ---
 def buscar_pagina_shibata(termo, pagina):
-    url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo}?page={pagina}"
+    # Encodando o termo (troca espaços por %20 de forma segura)
+    termo_encoded = urllib.parse.quote(termo)
+    url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo_encoded}?page={pagina}"
     try:
         r = requests.get(url, headers=HEADERS_SHIBATA, timeout=10)
         if r.status_code == 200: return r.json().get('data', {}).get('produtos', [])
@@ -234,9 +226,22 @@ termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
 if termo:
     col1, col2 = st.columns(2)
-    termos_busca = gerar_formas_variantes(termo)
-    # Palavras-chave para filtro normalizadas (sem acento)
+    
+    # --- AJUSTE DA BUSCA: Aumentando a rede de captura para contornar APIs rígidas ---
     palavras_chave_filtro = remover_acentos(termo).split()
+    termos_base = [remover_acentos(termo)] # Busca pela frase inteira (ex: "maca gala")
+    
+    # Se tiver mais de uma palavra, busca também só pela primeira (ex: "maca") 
+    # Isso evita que o Shibata não ache "Maçã Nacional Gala" porque não combinou exato com "maca gala"
+    if len(palavras_chave_filtro) > 1:
+        termos_base.append(palavras_chave_filtro[0])
+        
+    termos_busca_set = set()
+    for t in termos_base:
+        termos_busca_set.add(t)
+        if t.endswith("s"): termos_busca_set.add(t[:-1]) # Singular
+        else: termos_busca_set.add(t + "s") # Plural
+    termos_busca = list(termos_busca_set)
 
     with st.spinner("🔍 Buscando nos mercados..."):
         # --- PROCESSAMENTO SHIBATA ---
@@ -252,9 +257,9 @@ if termo:
             if pid and pid not in vistos_shibata and p.get("disponivel", True):
                 vistos_shibata.add(pid)
                 desc = p.get('descricao', '')
-                # Normalização da descrição para comparação flexível
                 desc_normalizada = remover_acentos(desc)
                 
+                # Validação final rigorosa local: Todas as palavras pesquisadas devem existir
                 if all(k in desc_normalizada for k in palavras_chave_filtro):
                     oferta = p.get('oferta') or {}
                     preco_oferta = oferta.get('preco_oferta')
