@@ -104,6 +104,7 @@ st.markdown("""
             display: flex;
             align-items: center;
             gap: 10px;
+            position: relative;
         }
         .product-image {
             min-width: 80px;
@@ -127,7 +128,7 @@ st.markdown("""
         }
         [data-testid="stColumn"] {
             overflow-y: auto;
-            max-height: 90vh;
+            max-height: 85vh;
             padding: 10px;
             border: 1px solid #f0f2f6;
             border-radius: 8px;
@@ -137,6 +138,7 @@ st.markdown("""
             background: transparent;
             scrollbar-width: thin;
             scrollbar-color: gray transparent;
+            scroll-behavior: smooth;
         }
         [data-testid="stColumn"]::-webkit-scrollbar {
             width: 6px;
@@ -152,6 +154,20 @@ st.markdown("""
         }
         [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
             background-color: white;
+        }
+        .btn-top {
+            text-decoration: none;
+            color: #555;
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem !important;
+            float: right;
+            border: 1px solid #ddd;
+        }
+        .btn-top:hover {
+            background: #ddd;
+            color: #000;
         }
         .block-container {
             padding-right: 47px !important;
@@ -223,7 +239,6 @@ if termo:
                     cond = promo.get('conditions') or []
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
                     
-                    # LOGICA ATUALIZADA NAGUMO:
                     p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
                     
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
@@ -235,6 +250,7 @@ if termo:
 
     # --- EXIBIÇÃO COLUNA 1 (SHIBATA) ---
     with col1:
+        st.markdown("<div id='topo_shibata'></div>", unsafe_allow_html=True)
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
             <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
@@ -258,6 +274,7 @@ if termo:
                         <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
                         <div style='font-size:0.85em;'><div><b>{p['preco_str']}</b></div></div>
                         <div style='font-size:0.85em;'><div style='color:gray; font-size:0.75em;'>{p['unit_label']}</div></div>
+                        <a href='#topo_shibata' class='btn-top'>↑ topo</a>
                     </div>
                 </div>
                 <hr class='product-separator' />
@@ -265,6 +282,7 @@ if termo:
 
     # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
     with col2:
+        st.markdown("<div id='topo_nagumo'></div>", unsafe_allow_html=True)
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
                 <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
@@ -279,7 +297,7 @@ if termo:
             imgs = p.get('photosUrl')
             img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
             st.markdown(f"""
-                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap; position: relative;">
                     <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
                         <img src="{img}" width="80" style="background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
                         <img src="{LOGO_NAGUMO_URL}" width="80" style="border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
@@ -288,7 +306,8 @@ if termo:
                         <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
                         <span style='font-weight: bold; font-size: 1rem;'>R$ {p['preco_final']:.2f}</span><br>
                         <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{p['unit_label']}</div>
-                        <div style="color: gray; font-size: 0.8em;">Estoque: {p.get('stock', 0)}</div>
+                        <div style="color: gray; font-size: 0.8em; margin-bottom: 5px;">Estoque: {p.get('stock', 0)}</div>
+                        <a href='#topo_nagumo' class='btn-top'>↑ topo</a>
                     </div>
                 </div>
                 <hr class='product-separator' />
@@ -298,7 +317,6 @@ if termo:
     components.html(
         f"""
         <script>
-            // A variável de tempo {time.time()} garante que o Streamlit recarregue o JS a cada busca
             const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
             cols.forEach(col => col.scrollTop = 0);
         </script>
