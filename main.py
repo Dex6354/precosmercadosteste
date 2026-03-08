@@ -104,7 +104,6 @@ st.markdown("""
             display: flex;
             align-items: center;
             gap: 10px;
-            position: relative;
         }
         .product-image {
             min-width: 80px;
@@ -122,10 +121,6 @@ st.markdown("""
             border-top: 1px solid #eee;
             margin: 10px 0;
         }
-        .info-cinza {
-            color: gray;
-            font-size: 0.8rem;
-        }
         [data-testid="stColumn"] {
             overflow-y: auto;
             max-height: 85vh;
@@ -139,48 +134,36 @@ st.markdown("""
             scrollbar-width: thin;
             scrollbar-color: gray transparent;
             scroll-behavior: smooth;
+            position: relative;
+        }
+        /* Botão Voltar ao Topo Fixo na Coluna */
+        .sticky-top-btn {
+            position: -webkit-sticky;
+            position: sticky;
+            bottom: 10px;
+            left: 85%;
+            z-index: 99;
+            background-color: #f1f1f1;
+            color: #333;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 0.7rem !important;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .sticky-top-btn:hover {
+            background-color: #ddd;
         }
         [data-testid="stColumn"]::-webkit-scrollbar {
             width: 6px;
-            background: transparent;
-        }
-        [data-testid="stColumn"]::-webkit-scrollbar-track {
-            background: transparent;
         }
         [data-testid="stColumn"]::-webkit-scrollbar-thumb {
             background-color: gray;
             border-radius: 3px;
-            border: 1px solid transparent;
-        }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
-            background-color: white;
-        }
-        .btn-top {
-            text-decoration: none;
-            color: #555;
-            background: #eee;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.65rem !important;
-            float: right;
-            border: 1px solid #ddd;
-        }
-        .btn-top:hover {
-            background: #ddd;
-            color: #000;
-        }
-        .block-container {
-            padding-right: 47px !important;
-        }
-        input[type="text"] {
-            font-size: 0.8rem !important;
-        }
-        .block-container {
-            padding-bottom: 15px !important;
-            margin-bottom: 15px !important;
-        }
-        [data-testid="stColumn"] {
-            margin-bottom: 20px;
         }
         header[data-testid="stHeader"] {
             display: none;
@@ -256,29 +239,27 @@ if termo:
             <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
             </h5>
         """, unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(shibata_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
         
-        if not shibata_final:
-            st.warning("Nenhum produto encontrado.")
-            
-        for p in shibata_final:
-            img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
-            st.markdown(f"""
-                <div class='product-container'>
-                    <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
-                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
-                        <img src='{LOGO_SHIBATA_URL}' width='80' 
-                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
-                    </a>
-                    <div class='product-info'>
-                        <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
-                        <div style='font-size:0.85em;'><div><b>{p['preco_str']}</b></div></div>
-                        <div style='font-size:0.85em;'><div style='color:gray; font-size:0.75em;'>{p['unit_label']}</div></div>
-                        <a href='#topo_shibata' class='btn-top'>↑ topo</a>
+        if shibata_final:
+            for p in shibata_final:
+                img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
+                st.markdown(f"""
+                    <div class='product-container'>
+                        <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
+                            <img src='{img}' width='80' style='background-color: white; border-radius: 6px; display: block;'/>
+                        </a>
+                        <div class='product-info'>
+                            <div><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
+                            <div><b>{p['preco_str']}</b></div>
+                            <div style='color:gray; font-size:0.75em;'>{p['unit_label']}</div>
+                        </div>
                     </div>
-                </div>
-                <hr class='product-separator' />
-            """, unsafe_allow_html=True)
+                    <hr class='product-separator' />
+                """, unsafe_allow_html=True)
+            # Botão Único no final da lista (Sticky)
+            st.markdown("<a href='#topo_shibata' class='sticky-top-btn'>↑ Topo</a>", unsafe_allow_html=True)
+        else:
+            st.warning("Nenhum produto encontrado.")
 
     # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
     with col2:
@@ -288,32 +269,30 @@ if termo:
                 <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
             </h5>
         """, unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(nagumo_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
         
-        if not nagumo_final:
-            st.warning("Nenhum produto encontrado.")
-            
-        for p in nagumo_final:
-            imgs = p.get('photosUrl')
-            img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
-            st.markdown(f"""
-                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap; position: relative;">
-                    <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
-                        <img src="{img}" width="80" style="background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
-                        <img src="{LOGO_NAGUMO_URL}" width="80" style="border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
-                    </a>
-                    <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
-                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
-                        <span style='font-weight: bold; font-size: 1rem;'>R$ {p['preco_final']:.2f}</span><br>
-                        <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{p['unit_label']}</div>
-                        <div style="color: gray; font-size: 0.8em; margin-bottom: 5px;">Estoque: {p.get('stock', 0)}</div>
-                        <a href='#topo_nagumo' class='btn-top'>↑ topo</a>
+        if nagumo_final:
+            for p in nagumo_final:
+                imgs = p.get('photosUrl')
+                img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
+                st.markdown(f"""
+                    <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem;">
+                        <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
+                            <img src="{img}" width="80" style="background-color: white; border-radius: 6px; display: block;"/>
+                        </a>
+                        <div style="flex: 1; word-break: break-word;">
+                            <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
+                            <span style='font-weight: bold; font-size: 1rem;'>R$ {p['preco_final']:.2f}</span><br>
+                            <div style="color: gray; font-size: 0.8em;">{p['unit_label']}</div>
+                        </div>
                     </div>
-                </div>
-                <hr class='product-separator' />
-            """, unsafe_allow_html=True)
+                    <hr class='product-separator' />
+                """, unsafe_allow_html=True)
+            # Botão Único no final da lista (Sticky)
+            st.markdown("<a href='#topo_nagumo' class='sticky-top-btn'>↑ Topo</a>", unsafe_allow_html=True)
+        else:
+            st.warning("Nenhum produto encontrado.")
 
-    # --- FORÇAR ROLAGEM PARA O TOPO ---
+    # JavaScript para resetar scroll ao pesquisar
     components.html(
         f"""
         <script>
@@ -322,5 +301,4 @@ if termo:
         </script>
         """,
         height=0,
-        width=0
     )
