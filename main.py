@@ -100,27 +100,7 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         div, span, strong, small { font-size: 0.75rem !important; }
         img { max-width: 100px; height: auto; }
-        .product-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .product-image {
-            min-width: 80px;
-            max-width: 80px;
-            flex-shrink: 0;
-        }
-        .product-info {
-            flex: 1 1 auto;
-            min-width: 0;
-            word-break: break-word;
-            overflow-wrap: break-word;
-        }
-        hr.product-separator {
-            border: none;
-            border-top: 1px solid #eee;
-            margin: 10px 0;
-        }
+        
         [data-testid="stColumn"] {
             overflow-y: auto;
             max-height: 85vh;
@@ -134,36 +114,43 @@ st.markdown("""
             scrollbar-width: thin;
             scrollbar-color: gray transparent;
             scroll-behavior: smooth;
-            position: relative;
+            position: relative; /* Necessário para o sticky interno */
         }
-        /* Botão Voltar ao Topo Fixo na Coluna */
-        .sticky-top-btn {
+
+        /* Botão Flutuante (Sticky) no final da coluna */
+        .btn-scroll-top {
             position: -webkit-sticky;
             position: sticky;
-            bottom: 10px;
-            left: 85%;
-            z-index: 99;
-            background-color: #f1f1f1;
+            bottom: 5px;
+            float: right;
+            z-index: 999;
+            background-color: rgba(240, 242, 246, 0.9);
             color: #333;
             border: 1px solid #ccc;
-            padding: 5px 10px;
-            border-radius: 20px;
+            padding: 4px 10px;
+            border-radius: 50px;
             text-decoration: none;
-            font-weight: bold;
             font-size: 0.7rem !important;
-            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
-            display: inline-block;
-            margin-top: 10px;
+            font-weight: bold;
+            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 5px;
         }
-        .sticky-top-btn:hover {
-            background-color: #ddd;
+        
+        .btn-scroll-top:hover {
+            background-color: #fff;
+            border-color: #999;
+            color: #000;
         }
-        [data-testid="stColumn"]::-webkit-scrollbar {
-            width: 6px;
+
+        .product-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb {
-            background-color: gray;
-            border-radius: 3px;
+        hr.product-separator {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 10px 0;
         }
         header[data-testid="stHeader"] {
             display: none;
@@ -198,7 +185,6 @@ if termo:
                     preco_oferta = oferta.get('preco_oferta') if (isinstance(oferta, dict)) else None
                     preco_base = p.get('preco') or 0
                     preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
-                    
                     p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
                     p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
                     p['sort_val'], unit_info = calcular_preco_unidade(desc, preco_final)
@@ -221,9 +207,7 @@ if termo:
                     promo = p.get('promotion') or {}
                     cond = promo.get('conditions') or []
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
-                    
                     p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
-                    
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
                     p['unit_label'] = label
                     p['sort_val'] = sort_v
@@ -236,7 +220,7 @@ if termo:
         st.markdown("<div id='topo_shibata'></div>", unsafe_allow_html=True)
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-            <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+            <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="background-color: white; border-radius: 4px; padding: 3px;"/>
             </h5>
         """, unsafe_allow_html=True)
         
@@ -245,8 +229,8 @@ if termo:
                 img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
                 st.markdown(f"""
                     <div class='product-container'>
-                        <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
-                            <img src='{img}' width='80' style='background-color: white; border-radius: 6px; display: block;'/>
+                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none;'>
+                            <img src='{img}' width='80' style='background-color: white; border-radius: 6px;'/>
                         </a>
                         <div class='product-info'>
                             <div><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
@@ -256,8 +240,8 @@ if termo:
                     </div>
                     <hr class='product-separator' />
                 """, unsafe_allow_html=True)
-            # Botão Único no final da lista (Sticky)
-            st.markdown("<a href='#topo_shibata' class='sticky-top-btn'>↑ Topo</a>", unsafe_allow_html=True)
+            # Botão Fixo (Sobrepondo ao rolar)
+            st.markdown("<a href='#topo_shibata' class='btn-scroll-top'>↑ topo</a>", unsafe_allow_html=True)
         else:
             st.warning("Nenhum produto encontrado.")
 
@@ -266,7 +250,7 @@ if termo:
         st.markdown("<div id='topo_nagumo'></div>", unsafe_allow_html=True)
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-                <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
+                <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
             </h5>
         """, unsafe_allow_html=True)
         
@@ -276,8 +260,8 @@ if termo:
                 img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
                 st.markdown(f"""
                     <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem;">
-                        <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
-                            <img src="{img}" width="80" style="background-color: white; border-radius: 6px; display: block;"/>
+                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none;'>
+                            <img src="{img}" width="80" style="background-color: white; border-radius: 6px;"/>
                         </a>
                         <div style="flex: 1; word-break: break-word;">
                             <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
@@ -287,12 +271,11 @@ if termo:
                     </div>
                     <hr class='product-separator' />
                 """, unsafe_allow_html=True)
-            # Botão Único no final da lista (Sticky)
-            st.markdown("<a href='#topo_nagumo' class='sticky-top-btn'>↑ Topo</a>", unsafe_allow_html=True)
+            # Botão Fixo (Sobrepondo ao rolar)
+            st.markdown("<a href='#topo_nagumo' class='btn-scroll-top'>↑ topo</a>", unsafe_allow_html=True)
         else:
             st.warning("Nenhum produto encontrado.")
 
-    # JavaScript para resetar scroll ao pesquisar
     components.html(
         f"""
         <script>
