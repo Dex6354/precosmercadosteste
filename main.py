@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import unicodedata
 import re
@@ -91,7 +92,6 @@ def calc_unitario_nagumo(preco, desc, nome, unit_api):
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
-# Script para garantir o scroll ao topo nas colunas
 st.markdown("""
     <style>
         .block-container { padding-top: 0rem; }
@@ -99,14 +99,34 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         div, span, strong, small { font-size: 0.75rem !important; }
         img { max-width: 100px; height: auto; }
-        .product-container { display: flex; align-items: center; gap: 10px; }
-        .product-image { min-width: 80px; max-width: 80px; flex-shrink: 0; }
-        .product-info { flex: 1 1 auto; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
-        hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
-        
+        .product-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .product-image {
+            min-width: 80px;
+            max-width: 80px;
+            flex-shrink: 0;
+        }
+        .product-info {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        hr.product-separator {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 10px 0;
+        }
+        .info-cinza {
+            color: gray;
+            font-size: 0.8rem;
+        }
         [data-testid="stColumn"] {
             overflow-y: auto;
-            max-height: 85vh;
+            max-height: 90vh;
             padding: 10px;
             border: 1px solid #f0f2f6;
             border-radius: 8px;
@@ -115,105 +135,172 @@ st.markdown("""
             margin-right: auto;
             background: transparent;
             scrollbar-width: thin;
+            scrollbar-color: gray transparent;
         }
-        header[data-testid="stHeader"] { display: none; }
+        [data-testid="stColumn"]::-webkit-scrollbar {
+            width: 6px;
+            background: transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar-thumb {
+            background-color: gray;
+            border-radius: 3px;
+            border: 1px solid transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover {
+            background-color: white;
+        }
+        .block-container {
+            padding-right: 47px !important;
+        }
+        input[type="text"] {
+            font-size: 0.8rem !important;
+        }
+        .block-container {
+            padding-bottom: 15px !important;
+            margin-bottom: 15px !important;
+        }
+        [data-testid="stColumn"] {
+            margin-bottom: 20px;
+        }
+        header[data-testid="stHeader"] {
+            display: none;
+        }
     </style>
-
-    <script>
-        const scrollColumns = () => {
-            const columns = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
-            columns.forEach(col => {
-                col.scrollTo({top: 0, behavior: 'auto'});
-            });
-        }
-        // Observa mudanças para resetar o scroll assim que novos itens aparecem
-        const observer = new MutationObserver((mutations) => {
-            scrollColumns();
-        });
-        observer.observe(window.parent.document.body, { childList: true, subtree: true });
-    </script>
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
-termo = st.text_input("🔎 Digite o nome do produto:", key="search_input").strip()
+termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
 if termo:
     col1, col2 = st.columns(2)
     termos_busca = gerar_formas_variantes(remover_acentos(termo))
     palavras_chave = remover_acentos(termo).split()
 
-    with st.spinner("🔍 Buscando..."):
-        # SHIBATA
+    with st.spinner("🔍 Buscando nos mercados..."):
+        # --- PROCESSAMENTO SHIBATA ---
         raw_shibata = []
         with ThreadPoolExecutor(max_workers=8) as exe:
-            fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 4)]
+            fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 6)]
             for f in as_completed(fs): raw_shibata.extend(f.result())
         
+        vistos_shibata = set()
         shibata_final = []
-        vistos_s = set()
         for p in raw_shibata:
             pid = p.get('id')
-            if pid and pid not in vistos_s:
-                vistos_s.add(pid)
+            if pid and pid not in vistos_shibata:
+                vistos_shibata.add(pid)
                 desc = p.get('descricao', '')
                 if all(k in remover_acentos(desc) for k in palavras_chave):
                     oferta = p.get('oferta')
-                    preco_final = float(oferta.get('preco_oferta')) if (p.get('em_oferta') and oferta) else float(p.get('preco') or 0)
+                    preco_oferta = oferta.get('preco_oferta') if (isinstance(oferta, dict)) else None
+                    preco_base = p.get('preco') or 0
+                    preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
+                    
                     p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
                     p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
                     p['sort_val'], unit_info = calcular_preco_unidade(desc, preco_final)
-                    p['unit_label'] = unit_info or ""
+                    p['unit_label'] = unit_info if unit_info else ""
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort_val'] or 999)
 
-        # NAGUMO
+        # --- PROCESSAMENTO NAGUMO ---
         raw_nagumo = []
         for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
         
+        vistos_nagumo = set()
         nagumo_final = []
-        vistos_n = set()
         for p in raw_nagumo:
             sku = p.get('sku')
-            if sku and sku not in vistos_n:
-                vistos_n.add(sku)
+            if sku and sku not in vistos_nagumo:
+                vistos_nagumo.add(sku)
                 nome, desc = p.get('name', ''), p.get('description', '')
                 if all(k in remover_acentos(f"{nome} {desc}") for k in palavras_chave):
                     promo = p.get('promotion') or {}
                     cond = promo.get('conditions') or []
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
+                    
+                    # LOGICA ATUALIZADA NAGUMO:
                     p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
+                    
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
-                    p['unit_label'], p['sort_val'], p['preco_final'] = label, sort_v, preco_final
+                    p['unit_label'] = label
+                    p['sort_val'] = sort_v
+                    p['preco_final'] = preco_final
                     nagumo_final.append(p)
         nagumo_final = sorted(nagumo_final, key=lambda x: x['sort_val'] or 999)
 
+    # --- EXIBIÇÃO COLUNA 1 (SHIBATA) ---
     with col1:
-        st.markdown(f"<div style='text-align:center'><img src='{LOGO_SHIBATA_URL}' width='80'/></div>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(shibata_final)} itens</small>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <h5 style="display: flex; align-items: center; justify-content: center;">
+            <img src="{LOGO_SHIBATA_URL}" width="80" alt="Shibata" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+            </h5>
+        """, unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(shibata_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        
+        if not shibata_final:
+            st.warning("Nenhum produto encontrado.")
+            
         for p in shibata_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
             st.markdown(f"""
                 <div class='product-container'>
-                    <a href='{p['url_final']}' target='_blank' class='product-image'><img src='{img}' width='80'/></a>
+                    <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
+                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
+                        <img src='{LOGO_SHIBATA_URL}' width='80' 
+                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
+                    </a>
                     <div class='product-info'>
-                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a><br>
-                        <strong>{p['preco_str']}</strong><br><span style='color:gray'>{p['unit_label']}</span>
+                        <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['descricao']}</b></a></div>
+                        <div style='font-size:0.85em;'><div><b>{p['preco_str']}</b></div></div>
+                        <div style='font-size:0.85em;'><div style='color:gray; font-size:0.75em;'>{p['unit_label']}</div></div>
                     </div>
-                </div><hr class='product-separator'/>
+                </div>
+                <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
+    # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
     with col2:
-        st.markdown(f"<div style='text-align:center'><img src='{LOGO_NAGUMO_URL}' width='80'/></div>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(nagumo_final)} itens</small>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <h5 style="display: flex; align-items: center; justify-content: center;">
+                <img src="{LOGO_NAGUMO_URL}" width="80" alt="Nagumo" style="margin-right:8px; border-radius: 6px; border: 1.5px solid white; padding: 0px;"/>
+            </h5>
+        """, unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(nagumo_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        
+        if not nagumo_final:
+            st.warning("Nenhum produto encontrado.")
+            
         for p in nagumo_final:
             imgs = p.get('photosUrl')
             img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
             st.markdown(f"""
-                <div class='product-container'>
-                    <a href='{p['url_final']}' target='_blank' class='product-image'><img src='{img}' width='80'/></a>
-                    <div class='product-info'>
-                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['name']}</b></a><br>
-                        <strong>R$ {p['preco_final']:.2f}</strong><br><span style='color:gray'>{p['unit_label']}</span>
+                <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 0rem; flex-wrap: wrap;">
+                    <a href='{p['url_final']}' target='_blank' style='flex: 0 0 auto; text-decoration:none;'>
+                        <img src="{img}" width="80" style="background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;"/>
+                        <img src="{LOGO_NAGUMO_URL}" width="80" style="border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border: 1.5px solid white; padding: 0px; display: block;"/>
+                    </a>
+                    <div style="flex: 1; word-break: break-word; overflow-wrap: anywhere;">
+                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><strong>{p['name']}</strong></a><br>
+                        <span style='font-weight: bold; font-size: 1rem;'>R$ {p['preco_final']:.2f}</span><br>
+                        <div style="margin-top: 4px; font-size: 0.9em; color: #666;">{p['unit_label']}</div>
+                        <div style="color: gray; font-size: 0.8em;">Estoque: {p.get('stock', 0)}</div>
                     </div>
-                </div><hr class='product-separator'/>
+                </div>
+                <hr class='product-separator' />
             """, unsafe_allow_html=True)
+
+    # --- FORÇAR ROLAGEM PARA O TOPO ---
+    components.html(
+        """
+        <script>
+            const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
+            cols.forEach(col => col.scrollTop = 0);
+        </script>
+        """,
+        height=0,
+        width=0
+    )
