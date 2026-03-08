@@ -2,25 +2,12 @@ import streamlit as st
 import requests
 import unicodedata
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Configurações para Shibata
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTYxIn0.yDCjqkeJv7D3wJ0T_fu3AaKlX9s5PQYXD19cESWpH-j3F_Is-Zb-bDdUvduwoI_RkOeqbYCuxN0ppQQXb1ArVg"
-ORG_ID = "161"
-HEADERS_SHIBATA = {
-    "Authorization": f"Bearer {TOKEN}",
-    "organizationid": ORG_ID,
-    "sessao-id": "4ea572793a132ad95d7e758a4eaf6b09",
-    "domainkey": "loja.shibata.com.br",
-    "User-Agent": "Mozilla/5.0"
-}
-
-# Links dos logos
-LOGO_SHIBATA_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-shibata.png"
+# Links dos logos e imagens
 LOGO_NAGUMO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nagumo2.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
-# --- FUNÇÕES UTILITÁRIAS ---
+# Funções utilitárias
 def remover_acentos(texto):
     if not texto: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
@@ -33,155 +20,129 @@ def gerar_formas_variantes(termo):
         variantes.add(termo + "s")
     return list(variantes)
 
-def slugify(text):
-    text = remover_acentos(text)
-    text = re.sub(r'[^a-z0-9\s-]', '', text).strip()
-    text = re.sub(r'[-\s]+', '-', text)
-    return text
-
-def formatar_preco_unidade_personalizado(preco_total, quantidade, unidade):
-    if not unidade: return f"R$ {preco_total:.2f}".replace('.', ',')
-    unidade = unidade.lower()
-    if quantidade and quantidade != 1:
-        return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{str(quantidade).replace('.', ',')}{unidade}"
-    return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{unidade}"
-
-# --- LÓGICA DE CÁLCULO ---
-def calcular_preco_unidade(descricao, preco_total):
-    desc_minus = remover_acentos(descricao)
-    patterns = [
-        (r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo)', 1),
-        (r'(\d+(?:[\.,]\d+)?)\s*(g|gramas?)', 1000),
-        (r'(\d+(?:[\.,]\d+)?)\s*(l|litros?)', 1),
-        (r'(\d+(?:[\.,]\d+)?)\s*(ml|mililitros?)', 1000)
-    ]
-    for p, div in patterns:
-        m = re.search(p, desc_minus)
-        if m:
-            val = float(m.group(1).replace(',', '.')) / div
-            return preco_total / val if val > 0 else None, f"R$ {preco_total/val:.2f}/un"
-    return None, None
-
 def contem_papel_toalha(texto):
     texto = remover_acentos(texto.lower())
     return "papel" in texto and "toalha" in texto
 
-# --- BUSCA SHIBATA ---
-def buscar_pagina_shibata(termo, pagina):
-    url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo}?page={pagina}"
-    try:
-        response = requests.get(url, headers=HEADERS_SHIBATA, timeout=10)
-        if response.status_code == 200:
-            data = response.json().get('data', {}).get('produtos', [])
-            return [p for p in data if p.get("disponivel", True)]
-    except: pass
-    return []
+def extrair_info_papel_toalha(nome, descricao):
+    texto_nome = remover_acentos(nome.lower())
+    texto_desc = remover_acentos(descricao.lower())
+    texto_completo = f"{texto_nome} {texto_desc}"
 
-# --- BUSCA NAGUMO (CORRIGIDA) ---
+    match = re.search(r'(\d+)\s*(un|unidades?|rolos?)\s*(\d+)\s*(folhas|toalhas)', texto_completo)
+    if match:
+        rolos = int(match.group(1))
+        folhas_por_rolo = int(match.group(3))
+        return rolos, folhas_por_rolo, rolos * folhas_por_rolo, f"{rolos} {match.group(2)}, {folhas_por_rolo} {match.group(4)}"
+
+    match = re.search(r'(\d+)\s*(folhas|toalhas)', texto_completo)
+    if match:
+        total_folhas = int(match.group(1))
+        return None, None, total_folhas, f"{total_folhas} {match.group(2)}"
+    return None, None, None, None
+
+def calcular_preco_unitario_nagumo(preco_valor, descricao, nome, unidade_api=None):
+    texto_completo = f"{nome} {descricao}".lower()
+    
+    if contem_papel_toalha(texto_completo):
+        _, _, total_folhas, _ = extrair_info_papel_toalha(nome, descricao)
+        if total_folhas: return f"R$ {preco_valor / total_folhas:.3f}/folha"
+
+    # Lógica simplificada para KG, L, UN
+    fontes = [descricao.lower(), nome.lower()]
+    for fonte in fontes:
+        m_g = re.search(r"(\d+[.,]?\d*)\s*(g|gramas?)", fonte)
+        if m_g: return f"R$ {preco_valor / (float(m_g.group(1).replace(',', '.')) / 1000):.2f}/kg"
+        m_ml = re.search(r"(\d+[.,]?\d*)\s*(ml|mililitros?)", fonte)
+        if m_ml: return f"R$ {preco_valor / (float(m_ml.group(1).replace(',', '.')) / 1000):.2f}/L"
+        m_un = re.search(r"(\d+[.,]?\d*)\s*(un|unidades?)", fonte)
+        if m_un: return f"R$ {preco_valor / float(m_un.group(1).replace(',', '.')):.2f}/un"
+
+    return "Sem unidade"
+
+def extrair_valor_unitario(preco_unitario):
+    match = re.search(r"R\$ (\d+[.,]?\d*)", preco_unitario)
+    return float(match.group(1).replace(',', '.')) if match else float('inf')
+
 def buscar_nagumo(term):
     url = "https://nextgentheadless.instaleap.io/api/v3"
-    headers = {
-        "Content-Type": "application/json",
-        "Origin": "https://www.nagumo.com",
-        "User-Agent": "Mozilla/5.0",
-        "apollographql-client-name": "Ecommerce SSR"
-    }
     payload = {
         "operationName": "SearchProducts",
         "variables": {
             "searchProductsInput": {
-                "clientId": "NAGUMO", "storeReference": "22", "currentPage": 1,
-                "pageSize": 50, "search": [{"query": term}]
+                "clientId": "NAGUMO", "storeReference": "22", "currentPage": 1, "pageSize": 500, "search": [{"query": term}]
             }
         },
         "query": """query SearchProducts($searchProductsInput: SearchProductsInput!) {
             searchProducts(searchProductsInput: $searchProductsInput) {
-                products { name price photosUrl sku description unit 
-                    promotion { isActive conditions { price } }
-                }
-            }
-        }"""
+                products { name price photosUrl sku stock description unit 
+                promotion { isActive conditions { price } } } } }"""
     }
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
-        res_json = response.json()
-        # Verificação robusta para evitar NoneType attribute access
-        data = res_json.get("data")
-        if data:
-            search_products = data.get("searchProducts")
-            if search_products:
-                return search_products.get("products") or []
-    except Exception as e:
-        st.error(f"Erro no Nagumo: {e}")
-    return []
+        r = requests.post(url, json=payload, timeout=10)
+        return r.json().get("data", {}).get("searchProducts", {}).get("products", [])
+    except: return []
 
-# --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
-st.markdown("<style>header{display:none;} [data-testid='stColumn']{overflow-y:auto; max-height:85vh; border:1px solid #ddd; padding:10px; border-radius:8px;}</style>", unsafe_allow_html=True)
+# Layout Streamlit
+st.set_page_config(page_title="Preços Nagumo", page_icon="🛒", layout="centered")
+st.markdown("<style>header, footer {visibility: hidden;} .block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
 
-st.markdown("<h6>🛒 Preços Mercados</h6>", unsafe_allow_html=True)
-termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
+st.markdown("<h6>🛒 Preços Nagumo</h6>", unsafe_allow_html=True)
+termo = st.text_input("🔎 Pesquisar no Nagumo:", "Banana").strip().lower()
 
 if termo:
-    termos_expandidos = gerar_formas_variantes(remover_acentos(termo))
-    col1, col2 = st.columns(2)
-
     with st.spinner("Buscando..."):
-        # SHIBATA
-        prod_shibata = []
-        with ThreadPoolExecutor(max_workers=5) as ex:
-            futures = [ex.submit(buscar_pagina_shibata, t, 1) for t in termos_expandidos]
-            for f in as_completed(futures): prod_shibata.extend(f.result())
-        
-        # NAGUMO
-        prod_nagumo = []
+        termos_expandidos = gerar_formas_variantes(remover_acentos(termo))
+        produtos_raw = []
         for t in termos_expandidos:
-            res = buscar_nagumo(t)
-            if res: prod_nagumo.extend(res)
+            produtos_raw.extend(buscar_nagumo(t))
+        
+        # Filtragem e Ordenação
+        vistos = set()
+        produtos_final = []
+        palavras_busca = remover_acentos(termo).split()
 
-    # Exibição Shibata
-    with col1:
-        st.image(LOGO_SHIBATA_URL, width=100)
-        for p in prod_shibata[:20]:
-            p_id = p.get('produto_id')
-            p_slug = slugify(p.get('descricao', ''))
-            link = f"https://www.loja.shibata.com.br/produto/{p_id}/{p_slug}"
-            preco = p.get('preco_oferta') or p.get('preco', 0)
-            
-            st.markdown(f"""
-            <div style='display:flex; gap:10px; margin-bottom:10px;'>
-                <img src="https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/100x100/{p.get('imagem')}" width="50">
-                <div>
-                    <a href='{link}' style='font-size:12px;'>{p.get('descricao')}</a><br>
-                    <strong>R$ {preco:.2f}</strong>
-                </div>
+        for p in produtos_raw:
+            if p['sku'] in vistos: continue
+            nome_desc = remover_acentos(f"{p['name']} {p.get('description','')}")
+            if all(palavra in nome_desc for palavra in palavras_busca):
+                vistos.add(p['sku'])
+                
+                # Preço e Promoção
+                preco_final = p['price']
+                promo = p.get("promotion") or {}
+                if promo.get("isActive") and promo.get("conditions"):
+                    preco_final = promo["conditions"][0]["price"]
+                
+                p['preco_exibir'] = preco_final
+                p['unit_str'] = calcular_preco_unitario_nagumo(preco_final, p['description'] or "", p['name'])
+                p['unit_val'] = extrair_valor_unitario(p['unit_str'])
+                produtos_final.append(p)
+
+        produtos_ordenados = sorted(produtos_final, key=lambda x: x['unit_val'])
+
+        st.markdown(f"""
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="{LOGO_NAGUMO_URL}" width="120" style="border-radius: 8px; border: 1px solid #ddd; padding: 5px; background: white;">
+                <p><small>{len(produtos_ordenados)} produtos encontrados</small></p>
             </div>
-            <hr>
-            """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # Exibição Nagumo
-    with col2:
-        st.image(LOGO_NAGUMO_URL, width=100)
-        seen_sku = set()
-        for p in prod_nagumo:
-            if p['sku'] in seen_sku: continue
-            seen_sku.add(p['sku'])
-            
-            promocao = p.get('promotion') or {}
-            preco = p['price']
-            if promocao.get('isActive') and promocao.get('conditions'):
-                preco = promocao['conditions'][0]['price']
-            
+        for p in produtos_ordenados:
             img = p['photosUrl'][0] if p.get('photosUrl') else DEFAULT_IMAGE_URL
-            link = f"https://www.nagumo.com/p/{p['sku']}"
+            url = f"https://www.nagumo.com/p/{p['sku']}"
             
+            preco_html = f"<b>R$ {p['preco_exibir']:.2f}</b>"
+            if p['preco_exibir'] < p['price']:
+                preco_html += f" <span style='color:red; font-size:0.8em;'>({int((1-p['preco_exibir']/p['price'])*100)}% OFF)</span>"
+
             st.markdown(f"""
-            <div style='display:flex; gap:10px; margin-bottom:10px;'>
-                <img src="{img}" width="50">
-                <div>
-                    <a href='{link}' style='font-size:12px;'>{p['name']}</a><br>
-                    <strong>R$ {preco:.2f}</strong>
+                <div style="display: flex; gap: 15px; align-items: center; margin-bottom: 15px; padding: 10px; border-bottom: 1px solid #eee;">
+                    <a href="{url}" target="_blank"><img src="{img}" width="80" style="border-radius: 5px;"></a>
+                    <div style="flex: 1;">
+                        <a href="{url}" target="_blank" style="text-decoration: none; color: #333;"><strong>{p['name']}</strong></a><br>
+                        {preco_html}<br>
+                        <small style="color: #666;">{p['unit_str']} | Estoque: {p['stock']}</small>
+                    </div>
                 </div>
-            </div>
-            <hr>
             """, unsafe_allow_html=True)
