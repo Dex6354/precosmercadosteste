@@ -100,11 +100,27 @@ st.markdown("""
         #MainMenu {visibility: hidden;}
         div, span, strong, small { font-size: 0.75rem !important; }
         img { max-width: 100px; height: auto; }
-        .product-container { display: flex; align-items: center; gap: 10px; }
-        .product-image { min-width: 80px; max-width: 80px; flex-shrink: 0; }
-        .product-info { flex: 1 1 auto; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
-        hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
-        
+        .product-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .product-image {
+            min-width: 80px;
+            max-width: 80px;
+            flex-shrink: 0;
+        }
+        .product-info {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        hr.product-separator {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 10px 0;
+        }
         [data-testid="stColumn"] {
             overflow-y: auto;
             max-height: 80vh;
@@ -118,28 +134,6 @@ st.markdown("""
             scrollbar-width: thin;
         }
         header[data-testid="stHeader"] { display: none; }
-
-        /* Estilo do Botão Voltar ao Topo no final */
-        .scroll-top-wrapper {
-            display: flex;
-            justify-content: flex-end;
-            padding: 20px 0;
-            width: 100%;
-        }
-        .scroll-button {
-            background-color: #f0f2f6;
-            border: 1px solid #d1d5db;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            cursor: pointer;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .scroll-button:hover { background-color: #e2e8f0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -151,15 +145,15 @@ if termo:
     termos_busca = gerar_formas_variantes(remover_acentos(termo))
     palavras_chave = remover_acentos(termo).split()
 
-    with st.spinner("🔍 Buscando..."):
-        # SHIBATA
+    with st.spinner("🔍 Buscando nos mercados..."):
+        # --- PROCESSAMENTO SHIBATA ---
         raw_shibata = []
         with ThreadPoolExecutor(max_workers=8) as exe:
             fs = [exe.submit(buscar_pagina_shibata, t, p) for t in termos_busca for p in range(1, 6)]
             for f in as_completed(fs): raw_shibata.extend(f.result())
         
-        shibata_final = []
         vistos_shibata = set()
+        shibata_final = []
         for p in raw_shibata:
             pid = p.get('id')
             if pid and pid not in vistos_shibata:
@@ -167,20 +161,22 @@ if termo:
                 desc = p.get('descricao', '')
                 if all(k in remover_acentos(desc) for k in palavras_chave):
                     oferta = p.get('oferta')
-                    preco_oferta = oferta.get('preco_oferta') if isinstance(oferta, dict) else None
-                    preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(p.get('preco') or 0)
+                    preco_oferta = oferta.get('preco_oferta') if (isinstance(oferta, dict)) else None
+                    preco_base = p.get('preco') or 0
+                    preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
                     p['url_final'] = f"https://www.loja.shibata.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
                     p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
                     p['sort_val'], unit_info = calcular_preco_unidade(desc, preco_final)
-                    p['unit_label'] = unit_info or ""
+                    p['unit_label'] = unit_info if unit_info else ""
                     shibata_final.append(p)
         shibata_final = sorted(shibata_final, key=lambda x: x['sort_val'] or 999)
 
-        # NAGUMO
+        # --- PROCESSAMENTO NAGUMO ---
         raw_nagumo = []
         for t in termos_busca: raw_nagumo.extend(buscar_nagumo(t))
-        nagumo_final = []
+        
         vistos_nagumo = set()
+        nagumo_final = []
         for p in raw_nagumo:
             sku = p.get('sku')
             if sku and sku not in vistos_nagumo:
@@ -192,36 +188,61 @@ if termo:
                     preco_final = cond[0].get('price') if (promo.get('isActive') and cond) else p.get('price', 0)
                     p['url_final'] = f"https://www.nagumo.com.br/categoria/departamentos/p/{slugify(nome)}-{sku}.html"
                     label, sort_v = calc_unitario_nagumo(preco_final, desc, nome, p.get('unit'))
-                    p['unit_label'], p['sort_val'], p['preco_final'] = label, sort_v, preco_final
+                    p['unit_label'] = label
+                    p['sort_val'] = sort_v
+                    p['preco_final'] = preco_final
                     nagumo_final.append(p)
         nagumo_final = sorted(nagumo_final, key=lambda x: x['sort_val'] or 999)
 
+    # --- EXIBIÇÃO COLUNA 1 (SHIBATA) ---
     with col1:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_SHIBATA_URL}' width='80'/></h5>", unsafe_allow_html=True)
+        if not shibata_final: st.warning("Nada no Shibata.")
         for p in shibata_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
-            st.markdown(f"<div class='product-container'><a href='{p['url_final']}' target='_blank' class='product-image'><img src='{img}' width='80'/></a><div class='product-info'><b>{p['descricao']}</b><br><strong>{p['preco_str']}</strong><br><small style='color:gray'>{p['unit_label']}</small></div></div><hr class='product-separator'/>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='product-container'>
+                    <a href='{p['url_final']}' target='_blank' class='product-image'><img src='{img}' width='80'/></a>
+                    <div class='product-info'>
+                        <b>{p['descricao']}</b><br>
+                        <strong>{p['preco_str']}</strong><br>
+                        <small style='color:gray;'>{p['unit_label']}</small>
+                    </div>
+                </div>
+                <hr class='product-separator' />
+            """, unsafe_allow_html=True)
 
+    # --- EXIBIÇÃO COLUNA 2 (NAGUMO) ---
     with col2:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_NAGUMO_URL}' width='80'/></h5>", unsafe_allow_html=True)
+        if not nagumo_final: st.warning("Nada no Nagumo.")
         for p in nagumo_final:
             imgs = p.get('photosUrl')
             img = imgs[0] if (isinstance(imgs, list) and imgs) else DEFAULT_IMAGE_URL
-            st.markdown(f"<div class='product-container'><a href='{p['url_final']}' target='_blank' class='product-image'><img src='{img}' width='80'/></a><div class='product-info'><b>{p['name']}</b><br><strong>R$ {p['preco_final']:.2f}</strong><br><small style='color:gray'>{p['unit_label']}</small></div></div><hr class='product-separator'/>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='product-container'>
+                    <a href='{p['url_final']}' target='_blank' class='product-image'><img src='{img}' width='80'/></a>
+                    <div class='product-info'>
+                        <b>{p['name']}</b><br>
+                        <strong style='font-size:1rem;'>R$ {p['preco_final']:.2f}</strong><br>
+                        <small style='color:gray;'>{p['unit_label']}</small>
+                    </div>
+                </div>
+                <hr class='product-separator' />
+            """, unsafe_allow_html=True)
 
-    # --- BOTÃO FIXO NO FINAL DA PÁGINA ---
-    st.markdown("<div class='scroll-top-wrapper'>", unsafe_allow_html=True)
-    if st.button("▲", help="Voltar ao topo das listas"):
+    # --- BOTÃO VOLTAR AO TOPO (ESTRATÉGIA DE FLUXO) ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("⬆️ Voltar ao Topo das Listas", use_container_width=True):
         components.html(
             """
             <script>
                 const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
-                cols.forEach(col => col.scrollTo({top: 0, behavior: 'smooth'}));
+                cols.forEach(col => {
+                    col.scrollTo({ top: 0, behavior: 'smooth' });
+                });
             </script>
             """,
-            height=0
+            height=0,
+            width=0
         )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Reset de scroll automático ao pesquisar
-    components.html("<script>const cols = window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]'); cols.forEach(col => col.scrollTop = 0);</script>", height=0)
