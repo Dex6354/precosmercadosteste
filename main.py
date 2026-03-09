@@ -440,7 +440,6 @@ if termo:
     components.html(
         f"""
         <script>
-            // A variável de tempo {time.time()} garante que o Streamlit recarregue o JS a cada busca
             const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
             cols.forEach(col => col.scrollTop = 0);
         </script>
