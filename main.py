@@ -32,7 +32,7 @@ def calcular_preco_unidade(descricao, preco_total):
 def buscar_atacadao(termo):
     # Usando o parâmetro 'fq' para tentar contornar limites de busca simples
     # E definindo o range de 0 a 49 (máximo seguro antes de causar erro 400 em algumas APIs)
-    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}&_from=0&_to=49"
+    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}&_from=0&_to=100"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
