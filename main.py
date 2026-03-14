@@ -28,58 +28,67 @@ def calcular_preco_unidade(descricao, preco_total):
             pass
     return None, None
 
-# --- FUNÇÃO DE BUSCA SEM LIMITAÇÃO ---
+# --- FUNÇÃO DE BUSCA OTIMIZADA ---
 def buscar_atacadao(termo):
-    # Adicionando parâmetros de paginação _from e _to na URL (Padrão VTEX para forçar mais itens)
-    # Buscando do item 0 ao 99
-    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}&_from=0&_to=99"
+    # Usando o parâmetro 'fq' para tentar contornar limites de busca simples
+    # E definindo o range de 0 a 49 (máximo seguro antes de causar erro 400 em algumas APIs)
+    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}&_from=0&_to=49"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        "Accept": "application/json",
-        "REST-Range": "resources=0-99",
-        "Range": "resources=0-99"
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Range": "resources=0-49"
     }
     
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        # Usamos uma sessão para manter cookies básicos se necessário
+        session = requests.Session()
+        r = session.get(url, headers=headers, timeout=15)
+        
         if r.status_code in [200, 206]:
-            return r.json(), r.status_code
+            return r.json()
     except:
         pass
-    return [], None
+    return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Total", layout="wide")
+st.set_page_config(page_title="Atacadão - Preços", layout="wide")
 
 st.markdown("""
     <style>
         .product-card {
             border: 1px solid #ddd; padding: 12px; border-radius: 12px; 
             margin-bottom: 12px; display: flex; align-items: center; 
-            background: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+            background: white; box-shadow: 2px 2px 6px rgba(0,0,0,0.05);
         }
-        .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
-        .unit-price { color: #666; font-size: 0.85rem; }
-        .product-name { font-size: 0.95rem; color: #333; text-decoration: none; font-weight: 600; }
+        .price { color: #d32f2f; font-weight: bold; font-size: 1.25rem; }
+        .unit-price { color: #555; font-size: 0.85rem; background: #f9f9f9; padding: 2px 5px; border-radius: 4px; }
+        .product-name { font-size: 0.95rem; color: #222; text-decoration: none; font-weight: 600; line-height: 1.2; display: block; margin-bottom: 4px; }
+        .stTextInput > div > div > input { font-size: 16px !important; } /* Evita zoom no iPhone/Android */
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 Atacadão")
 
-termo_busca = st.text_input("Buscar produto:", placeholder="Digite e aperte Enter")
+termo_busca = st.text_input("Buscar produto:", placeholder="Digite o que procura...")
 
 if termo_busca:
-    with st.spinner(f"Buscando tudo de '{termo_busca}'..."):
-        produtos_raw, status = buscar_atacadao(termo_busca)
+    with st.spinner("Buscando no Atacadão..."):
+        produtos_raw = buscar_atacadao(termo_busca)
     
     if not produtos_raw:
-        st.warning("Nenhum resultado encontrado.")
+        st.error("Nenhum item encontrado. Tente pesquisar apenas uma palavra (ex: 'Arroz' em vez de 'Arroz Branco').")
     else:
-        st.caption(f"Exibindo {len(produtos_raw)} itens encontrados (Status {status})")
+        st.info(f"Encontrados {len(produtos_raw)} produtos.")
         
-        # Ordenar por preço (opcional, mas ajuda a ver as melhores ofertas primeiro)
-        # produtos_raw = sorted(produtos_raw, key=lambda x: x.get('items', [{}])[0].get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 999))
+        # Ordenar por preço para facilitar a visualização
+        try:
+            produtos_raw = sorted(produtos_raw, key=lambda x: x.get('items', [{}])[0].get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 9999))
+        except:
+            pass
 
         for p in produtos_raw:
             try:
@@ -97,17 +106,17 @@ if termo_busca:
                     st.markdown(f"""
                         <div class="product-card">
                             <div style="min-width: 80px; text-align: center;">
-                                <img src="{img}" width="75">
+                                <img src="{img}" width="75" style="max-height: 75px; object-fit: contain;">
                             </div>
                             <div style="flex: 1; margin-left: 12px;">
                                 <a href="{link}" target="_blank" class="product-name">{nome}</a>
                                 <span class="price">R$ {preco:,.2f}</span><br>
-                                <span class="unit-price">{calc_label if calc_label else ""}</span>
+                                {f'<span class="unit-price">{calc_label}</span>' if calc_label else ""}
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
             except:
                 continue
 
-# Script para manter o foco no topo após nova busca
+# Script para resetar scroll no Android
 components.html("<script>window.parent.document.querySelector('.main').scrollTop = 0;</script>", height=0)
