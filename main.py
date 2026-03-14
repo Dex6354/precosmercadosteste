@@ -13,7 +13,6 @@ def remover_acentos(texto):
 
 def calcular_preco_unidade(descricao, preco_total):
     desc_minus = remover_acentos(descricao)
-    # Busca padrões de peso/volume: kg, g, l, ml
     m = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo|g|gramas?|l|litros?|ml)', desc_minus)
     if m:
         try:
@@ -27,66 +26,61 @@ def calcular_preco_unidade(descricao, preco_total):
         except: pass
     return None, None
 
-# --- FUNÇÃO DE BUSCA DIRETA ---
 def buscar_atacadao(termo):
-    # Utilizando o endpoint /io/api/ conforme identificado
-    url = f"https://www.atacadao.com.br/io/api/catalog_system/pub/products/search?ft={termo}"
+    # Endpoint via Search API (Intelligent Search)
+    url = f"https://www.atacadao.com.br/api/v1/search?q={termo}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Referer": "https://www.atacadao.com.br/"
     }
     
     try:
         r = requests.get(url, headers=headers, timeout=15)
         if r.status_code == 200:
-            return r.json()
+            return r.json().get('products', [])
     except:
         pass
     return []
 
-# --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Atacadão Direto", layout="wide")
+# --- INTERFACE ---
+st.set_page_config(page_title="Atacadão App", layout="wide")
 
 st.markdown("""
     <style>
         .product-card {
-            border: 1px solid #ddd; padding: 12px; border-radius: 10px; 
-            margin-bottom: 10px; display: flex; align-items: center; 
-            background: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+            border: 1px solid #ddd; padding: 12px; border-radius: 12px; 
+            margin-bottom: 12px; display: flex; align-items: center; background: white;
         }
-        .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
+        .price { color: #d32f2f; font-weight: bold; font-size: 1.3rem; }
         .unit-price { color: #666; font-size: 0.85rem; background: #f1f1f1; padding: 2px 5px; border-radius: 4px; }
-        .product-name { font-size: 0.95rem; color: #333; text-decoration: none; font-weight: bold; line-height: 1.2; }
-        input { font-size: 16px !important; }
+        .product-name { font-size: 1rem; color: #333; text-decoration: none; font-weight: bold; line-height: 1.2; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 Atacadão")
 
-termo_busca = st.text_input("Buscar produto:", placeholder="Ex: Arroz, Feijão...")
+termo_busca = st.text_input("O que você busca?", placeholder="Ex: Arroz")
 
 if termo_busca:
-    with st.spinner("Carregando itens do Atacadão..."):
+    with st.spinner("Buscando..."):
         produtos = buscar_atacadao(termo_busca)
     
     if not produtos:
-        st.warning("Nenhum item encontrado no JSON.")
+        st.error("Nenhum item encontrado. Tente um termo mais simples como 'Feijao' ou 'Leite'.")
     else:
-        st.success(f"{len(produtos)} itens carregados com sucesso.")
+        st.success(f"{len(produtos)} itens encontrados.")
         
-        # Ordenação por preço
-        try:
-            produtos = sorted(produtos, key=lambda x: x.get('items', [{}])[0].get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 9999))
-        except: pass
-
         for p in produtos:
             try:
                 nome = p.get('productName', '')
                 link = p.get('link', '#')
+                # Na API v1, a imagem e preço ficam em 'items'
                 item_detalhe = p.get('items', [{}])[0]
                 img = item_detalhe.get('images', [{}])[0].get('imageUrl', '')
                 
+                # Captura de preço na API v1 (costuma vir em centavos ou direto em Price)
                 oferta = item_detalhe.get('sellers', [{}])[0].get('commertialOffer', {})
                 preco = oferta.get('Price', 0)
                 
@@ -95,11 +89,11 @@ if termo_busca:
                     
                     st.markdown(f"""
                         <div class="product-card">
-                            <div style="min-width: 75px; text-align: center;">
-                                <img src="{img}" width="70" style="max-height: 75px; object-fit: contain;">
+                            <div style="min-width: 80px; text-align: center;">
+                                <img src="{img}" width="75" style="max-height: 80px; object-fit: contain;">
                             </div>
-                            <div style="flex: 1; margin-left: 12px;">
-                                <a href="{link}" target="_blank" class="product-name">{nome}</a><br>
+                            <div style="flex: 1; margin-left: 15px;">
+                                <a href="https://www.atacadao.com.br{link}" target="_blank" class="product-name">{nome}</a><br>
                                 <span class="price">R$ {preco:,.2f}</span>
                                 {f'<br><span class="unit-price">{calc_label}</span>' if calc_label else ""}
                             </div>
@@ -108,5 +102,4 @@ if termo_busca:
             except:
                 continue
 
-# Scroll para o topo
 components.html("<script>window.parent.document.querySelector('.main').scrollTop = 0;</script>", height=0)
