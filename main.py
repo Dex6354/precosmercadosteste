@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 import requests
 import unicodedata
 import re
-import json
 
 # --- CONFIGURAÇÕES ---
 LOGO_ATACADAO_URL = "https://upload.wikimedia.org/wikipedia/pt/d/d3/Atacad%C3%A3o_logo.png"
@@ -14,7 +13,6 @@ def remover_acentos(texto):
 
 def calcular_preco_unidade(descricao, preco_total):
     desc_minus = remover_acentos(descricao)
-    # Tenta encontrar KG ou Gramas para calcular valor relativo
     m_kg = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo|g|gramas?)', desc_minus)
     if m_kg:
         try:
@@ -29,29 +27,32 @@ def calcular_preco_unidade(descricao, preco_total):
             pass
     return None, None
 
-# --- FUNÇÃO DE BUSCA AJUSTADA ---
+# --- FUNÇÃO DE BUSCA ---
 def buscar_atacadao(termo):
-    # Endpoint de busca pública VTEX
+    # Endpoint de busca
     url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
         "Accept": "application/json",
-        "REST-Range": "resources=0-49", # Define o intervalo para evitar Erro 206
-        "Range": "resources=0-49"      # Alguns servidores exigem este formato
+        "Content-Type": "application/json",
+        # Forçando o range de 0 a 49 para trazer 50 itens
+        "REST-Range": "resources=0-49",
+        "Range": "resources=0-49",
+        "x-vtex-api-appkey": "",
+        "x-vtex-api-apptoken": ""
     }
     
-    debug_info = {"url": url, "status": None, "response_len": 0, "error": None}
+    debug_info = {"url": url, "status": None, "count": 0}
     
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        # Adicionado allow_redirects e timeout
+        r = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
         debug_info["status"] = r.status_code
         if r.status_code in [200, 206]:
             data = r.json()
-            debug_info["response_len"] = len(data)
+            debug_info["count"] = len(data)
             return data, debug_info
-        else:
-            debug_info["error"] = f"Erro HTTP: {r.status_code}"
     except Exception as e:
         debug_info["error"] = str(e)
     
@@ -65,71 +66,57 @@ st.markdown("""
         .product-card {
             border: 1px solid #ddd; padding: 12px; border-radius: 12px; 
             margin-bottom: 12px; display: flex; align-items: center; 
-            background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            background: white;
         }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.3rem; }
         .unit-price { color: #666; font-size: 0.9rem; }
-        .product-name { font-size: 1rem; color: #333; text-decoration: none; display: block; margin-bottom: 5px; }
+        .product-name { font-size: 1rem; color: #333; text-decoration: none; display: block; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 Atacadão")
 
-enable_debug = st.checkbox("Modo Debugger")
-termo_busca = st.text_input("Buscar produto:", placeholder="Ex: Arroz, Feijão...")
+enable_debug = st.checkbox("Ver Debugger")
+termo_busca = st.text_input("O que você busca?", placeholder="Ex: Banana, Leite...")
 
 if termo_busca:
-    with st.spinner("Buscando..."):
+    with st.spinner("Buscando itens..."):
         produtos_raw, info = buscar_atacadao(termo_busca)
     
     if enable_debug:
-        st.info(f"Status: {info['status']} | Itens: {info['response_len']}")
-        if info['error']: st.error(info['error'])
-        with st.expander("Dados crus (JSON)"):
-            st.json(produtos_raw)
+        st.write(f"Status: {info['status']} | Itens retornados: {info['count']}")
 
     if not produtos_raw:
-        st.warning("Nenhum item encontrado. Tente um termo mais genérico.")
+        st.warning("Nada encontrado.")
     else:
         for p in produtos_raw:
             try:
-                nome = p.get('productName', 'Produto sem nome')
+                nome = p.get('productName', '')
                 link = p.get('link', '#')
+                item = p.get('items', [{}])[0]
+                img = item.get('images', [{}])[0].get('imageUrl', '')
                 
-                # Navegação no JSON da VTEX para pegar imagem e preço
-                items = p.get('items', [])
-                if not items: continue
-                
-                primeiro_item = items[0]
-                img = primeiro_item.get('images', [{}])[0].get('imageUrl', '')
-                
-                sellers = primeiro_item.get('sellers', [])
-                if not sellers: continue
-                
-                oferta = sellers[0].get('commertialOffer', {})
+                # Preço
+                oferta = item.get('sellers', [{}])[0].get('commertialOffer', {})
                 preco = oferta.get('Price', 0)
                 
-                # Só exibe se houver preço
                 if preco > 0:
                     calc_val, calc_label = calcular_preco_unidade(nome, preco)
                     
                     st.markdown(f"""
                         <div class="product-card">
-                            <div style="min-width: 90px; text-align: center;">
-                                <img src="{img}" width="80" style="object-fit: contain;">
+                            <div style="min-width: 85px; text-align: center;">
+                                <img src="{img}" width="80">
                             </div>
                             <div style="flex: 1; margin-left: 15px;">
                                 <a href="{link}" target="_blank" class="product-name"><strong>{nome}</strong></a>
                                 <span class="price">R$ {preco:,.2f}</span><br>
                                 <span class="unit-price">{calc_label if calc_label else ""}</span>
                             </div>
-                            <div style="text-align: right;">
-                                <img src="{LOGO_ATACADAO_URL}" width="50">
-                            </div>
                         </div>
                     """, unsafe_allow_html=True)
             except:
                 continue
 
-# Forçar rolagem ao topo ao pesquisar
+# Resolve problema de cache de scroll no Android
 components.html("<script>window.parent.document.querySelector('.main').scrollTop = 0;</script>", height=0)
