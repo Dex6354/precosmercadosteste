@@ -13,7 +13,7 @@ def remover_acentos(texto):
 
 def calcular_preco_unidade(descricao, preco_total):
     desc_minus = remover_acentos(descricao)
-    # Procura por peso ou volume (kg, g, l, ml)
+    # Busca padrões de peso/volume: kg, g, l, ml
     m = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo|g|gramas?|l|litros?|ml)', desc_minus)
     if m:
         try:
@@ -27,61 +27,55 @@ def calcular_preco_unidade(descricao, preco_total):
         except: pass
     return None, None
 
-# --- FUNÇÃO DE BUSCA COMPLETA ---
-def buscar_atacadao_completo(termo):
-    # Aumentamos o range para 99 para tentar pegar todo o catálogo daquela busca
-    start = 0
-    end = 99
-    
-    # URL com parâmetros explícitos de paginação VTEX
-    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}&_from={start}&_to={end}"
+# --- FUNÇÃO DE BUSCA DIRETA ---
+def buscar_atacadao(termo):
+    # Utilizando o endpoint /io/api/ conforme identificado
+    url = f"https://www.atacadao.com.br/io/api/catalog_system/pub/products/search?ft={termo}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-        "Accept": "application/json",
-        "REST-Range": f"resources={start}-{end}",
-        "Range": f"resources={start}-{end}"
+        "Accept": "application/json"
     }
     
     try:
-        r = requests.get(url, headers=headers, timeout=20)
-        if r.status_code in [200, 206]:
+        r = requests.get(url, headers=headers, timeout=15)
+        if r.status_code == 200:
             return r.json()
     except:
         pass
     return []
 
-# --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Completo", layout="wide")
+# --- INTERFACE STREAMLIT ---
+st.set_page_config(page_title="Atacadão Direto", layout="wide")
 
 st.markdown("""
     <style>
         .product-card {
             border: 1px solid #ddd; padding: 12px; border-radius: 10px; 
             margin-bottom: 10px; display: flex; align-items: center; 
-            background: white;
+            background: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
         }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
         .unit-price { color: #666; font-size: 0.85rem; background: #f1f1f1; padding: 2px 5px; border-radius: 4px; }
-        .product-name { font-size: 0.9rem; color: #333; text-decoration: none; font-weight: bold; line-height: 1.1; }
+        .product-name { font-size: 0.95rem; color: #333; text-decoration: none; font-weight: bold; line-height: 1.2; }
+        input { font-size: 16px !important; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 Atacadão")
 
-termo_busca = st.text_input("O que deseja buscar?", placeholder="Ex: Arroz, Óleo, Carne...")
+termo_busca = st.text_input("Buscar produto:", placeholder="Ex: Arroz, Feijão...")
 
 if termo_busca:
-    with st.spinner(f"Coletando todos os itens de '{termo_busca}'..."):
-        produtos = buscar_atacadao_completo(termo_busca)
+    with st.spinner("Carregando itens do Atacadão..."):
+        produtos = buscar_atacadao(termo_busca)
     
     if not produtos:
-        st.warning("Nenhum item retornado. Tente um termo mais simples.")
+        st.warning("Nenhum item encontrado no JSON.")
     else:
-        # Mostra a quantidade real retornada pelo JSON
-        st.success(f"Foram carregados {len(produtos)} itens.")
+        st.success(f"{len(produtos)} itens carregados com sucesso.")
         
-        # Ordenação automática pelo menor preço
+        # Ordenação por preço
         try:
             produtos = sorted(produtos, key=lambda x: x.get('items', [{}])[0].get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 9999))
         except: pass
@@ -90,10 +84,10 @@ if termo_busca:
             try:
                 nome = p.get('productName', '')
                 link = p.get('link', '#')
-                item = p.get('items', [{}])[0]
-                img = item.get('images', [{}])[0].get('imageUrl', '')
+                item_detalhe = p.get('items', [{}])[0]
+                img = item_detalhe.get('images', [{}])[0].get('imageUrl', '')
                 
-                oferta = item.get('sellers', [{}])[0].get('commertialOffer', {})
+                oferta = item_detalhe.get('sellers', [{}])[0].get('commertialOffer', {})
                 preco = oferta.get('Price', 0)
                 
                 if preco > 0:
@@ -101,18 +95,18 @@ if termo_busca:
                     
                     st.markdown(f"""
                         <div class="product-card">
-                            <div style="min-width: 70px; text-align: center;">
-                                <img src="{img}" width="65" style="max-height: 70px; object-fit: contain;">
+                            <div style="min-width: 75px; text-align: center;">
+                                <img src="{img}" width="70" style="max-height: 75px; object-fit: contain;">
                             </div>
                             <div style="flex: 1; margin-left: 12px;">
                                 <a href="{link}" target="_blank" class="product-name">{nome}</a><br>
                                 <span class="price">R$ {preco:,.2f}</span>
-                                {f'<span class="unit-price">{calc_label}</span>' if calc_label else ""}
+                                {f'<br><span class="unit-price">{calc_label}</span>' if calc_label else ""}
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
             except:
                 continue
 
-# Resetar scroll para o topo no Android
+# Scroll para o topo
 components.html("<script>window.parent.document.querySelector('.main').scrollTop = 0;</script>", height=0)
