@@ -27,97 +27,106 @@ def calcular_preco_unidade(descricao, preco_total):
             pass
     return None, None
 
-# --- FUNÇÃO DE BUSCA DEFINITIVA ---
+# --- FUNÇÃO DE BUSCA REVISADA ---
 def buscar_atacadao(termo):
     termo_encoded = requests.utils.quote(termo)
-    # Endpoint de busca global que ignora mapeamentos de categoria restritos
-    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search/{termo_encoded}?O=OrderByTopSaleDESC"
+    # Endpoint alternativo mais estável
+    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo_encoded}&O=OrderByTopSaleDESC"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-        # Range ampliado para garantir que nada fique de fora na primeira página
-        "REST-Range": "resources=0-99",
-        "Range": "resources=0-99"
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Range": "resources=0-49",
+        "Origin": "https://www.atacadao.com.br",
+        "Referer": "https://www.atacadao.com.br/"
     }
     
     try:
-        r = requests.get(url, headers=headers, timeout=20)
+        # Usando Session para manter headers consistentes
+        session = requests.Session()
+        r = session.get(url, headers=headers, timeout=15)
+        
         if r.status_code in [200, 206]:
             return r.json()
-    except:
+    except Exception as e:
+        st.error(f"Erro na requisição: {e}")
         return []
     return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Total", layout="wide")
+st.set_page_config(page_title="Atacadão - Comparador Total", layout="wide")
 
+# CSS para cards compactos
 st.markdown("""
     <style>
         .product-card {
-            border: 1px solid #eee; padding: 12px; border-radius: 10px; 
+            border: 1px solid #ddd; padding: 10px; border-radius: 8px; 
             margin-bottom: 8px; display: flex; align-items: center; 
-            background: #fff;
+            background: white;
         }
-        .price { color: #d32f2f; font-weight: 800; font-size: 1.1rem; }
-        .unit-price { color: #666; font-size: 0.8rem; margin-left: 10px; background: #f9f9f9; padding: 2px 5px; }
-        .product-name { font-size: 0.9rem; color: #111; text-decoration: none; font-weight: 600; }
+        .price { color: #d32f2f; font-weight: bold; font-size: 1.1rem; }
+        .unit-price { color: #555; font-size: 0.8rem; margin-left: 10px; border-left: 1px solid #eee; padding-left: 10px;}
+        .product-name { font-size: 0.85rem; color: #333; text-decoration: none; font-weight: 600; line-height: 1.2; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 Atacadão - Busca Completa")
+st.title("🛒 Atacadão")
 
-# Termo fixo inicial conforme solicitado
-if "termo_input" not in st.session_state:
-    st.session_state.termo_input = "Arroz Camil"
+# Fixando Arroz Camil na primeira pesquisa
+if "termo_fixo" not in st.session_state:
+    st.session_state.termo_fixo = "Arroz Camil"
 
-termo = st.text_input("Produto:", value=st.session_state.termo_input)
+termo_busca = st.text_input("Pesquisar produto:", value=st.session_state.termo_fixo)
 
-if termo:
-    with st.spinner("Varrendo catálogo..."):
-        produtos = buscar_atacadao(termo)
+if termo_busca:
+    with st.spinner(f"Buscando todos os itens para '{termo_busca}'..."):
+        produtos = buscar_atacadao(termo_busca)
     
     if not produtos:
-        st.warning("Nenhum item encontrado.")
+        st.warning("A API não retornou dados. Tente novamente em instantes.")
     else:
-        st.caption(f"Exibindo {len(produtos)} resultados para '{termo}'")
+        st.success(f"Foram encontrados {len(produtos)} itens.")
         
         for p in produtos:
             try:
                 nome = p.get('productName', '')
-                # No Atacadão, um produto pode ter vários itens (SKUs)
-                # Vamos focar no primeiro que tiver preço disponível
-                item_valido = None
-                for item in p.get('items', []):
-                    oferta = item.get('sellers', [{}])[0].get('commertialOffer', {})
-                    if oferta.get('Price', 0) > 0:
-                        item_valido = (item, oferta)
-                        break
-                
-                if not item_valido:
-                    continue
-                
-                sku, info_preco = item_valido
-                img = sku.get('images', [{}])[0].get('imageUrl', '')
-                preco = info_preco.get('Price', 0)
                 link = p.get('link', '#')
                 
-                _, calc_label = calcular_preco_unidade(nome, preco)
+                # O Atacadão as vezes retorna itens sem preço no primeiro slot
+                # Varremos os itens para achar o que tem valor
+                dados_item = None
+                for item in p.get('items', []):
+                    seller = item.get('sellers', [{}])[0]
+                    preco = seller.get('commertialOffer', {}).get('Price', 0)
+                    if preco > 0:
+                        dados_item = {
+                            "img": item.get('images', [{}])[0].get('imageUrl', ''),
+                            "preco": preco
+                        }
+                        break
+                
+                if not dados_item: continue
+                
+                _, calc_label = calcular_preco_unidade(nome, dados_item['preco'])
                 
                 st.markdown(f"""
                     <div class="product-card">
-                        <div style="width: 60px; flex-shrink: 0;">
-                            <img src="{img}" width="55">
+                        <div style="width: 60px; text-align: center;">
+                            <img src="{dados_item['img']}" width="50" style="max-height: 50px; object-fit: contain;">
                         </div>
-                        <div style="flex-grow: 1; padding-left: 15px;">
+                        <div style="flex: 1; margin-left: 15px;">
                             <a href="{link}" target="_blank" class="product-name">{nome}</a><br>
-                            <span class="price">R$ {preco:,.2f}</span>
+                            <span class="price">R$ {dados_item['preco']:,.2f}</span>
                             {f'<span class="unit-price">{calc_label}</span>' if calc_label else ''}
                         </div>
-                        <img src="{LOGO_ATACADAO_URL}" width="35">
+                        <div style="text-align: right;">
+                            <img src="{LOGO_ATACADAO_URL}" width="35">
+                        </div>
                     </div>
                 """, unsafe_allow_html=True)
             except:
                 continue
 
+# Scroll para o topo
 components.html("<script>window.parent.document.querySelector('.main').scrollTop = 0;</script>", height=0)
