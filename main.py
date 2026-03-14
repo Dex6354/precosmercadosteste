@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 import requests
 import unicodedata
 import re
-import json
 
 # --- CONFIGURAÇÕES ---
 LOGO_ATACADAO_URL = "https://upload.wikimedia.org/wikipedia/pt/d/d3/Atacad%C3%A3o_logo.png"
@@ -28,12 +27,13 @@ def calcular_preco_unidade(descricao, preco_total):
             pass
     return None, None
 
-# --- FUNÇÃO DE BUSCA OTIMIZADA ---
+# --- FUNÇÃO DE BUSCA AJUSTADA ---
 def buscar_atacadao(termo, qtd_itens=50):
-    # O=OrderByPriceASC ajuda a trazer itens com preço definido primeiro
-    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search?ft={termo}&O=OrderByPriceASC"
+    # Tratamento do termo para a URL
+    termo_encoded = requests.utils.quote(termo)
+    # Mudança na estrutura da URL para busca de catálogo mais ampla
+    url = f"https://www.atacadao.com.br/api/catalog_system/pub/products/search/{termo_encoded}?O=OrderByTopSaleDESC"
     
-    # Range dinâmico para buscar mais resultados
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "application/json",
@@ -48,12 +48,15 @@ def buscar_atacadao(termo, qtd_itens=50):
         debug_info["status"] = r.status_code
         if r.status_code in [200, 206]:
             data = r.json()
-            # Filtra apenas produtos que possuem ofertas comerciais (preço > 0)
-            produtos_validos = [
-                p for p in data 
-                if p.get('items') and p['items'][0].get('sellers') 
-                and p['items'][0]['sellers'][0].get('commertialOffer', {}).get('Price', 0) > 0
-            ]
+            # Filtragem para garantir que o item tenha preço e pertença à busca
+            produtos_validos = []
+            for p in data:
+                items = p.get('items', [])
+                if items:
+                    oferta = items[0].get('sellers', [{}])[0].get('commertialOffer', {})
+                    if oferta.get('Price', 0) > 0:
+                        produtos_validos.append(p)
+            
             debug_info["response_len"] = len(produtos_validos)
             return produtos_validos, debug_info
         else:
@@ -64,7 +67,7 @@ def buscar_atacadao(termo, qtd_itens=50):
     return [], debug_info
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão - Comparador", layout="wide")
+st.set_page_config(page_title="Atacadão - Preços", layout="wide")
 
 st.markdown("""
     <style>
@@ -74,70 +77,64 @@ st.markdown("""
             background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.3rem; }
-        .unit-price { color: #666; font-size: 0.9rem; margin-left: 8px; }
-        .product-name { font-size: 1rem; color: #333; text-decoration: none; display: block; margin-bottom: 5px; }
+        .unit-price { color: #666; font-size: 0.85rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }
+        .product-name { font-size: 1rem; color: #333; text-decoration: none; display: block; margin-bottom: 5px; line-height: 1.2; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 Busca Atacadão")
+st.title("🛒 Atacadão")
 
-# Filtros de busca
+# Fixando a primeira pesquisa em "Arroz Camil" caso o campo esteja vazio
+if "primeira_execucao" not in st.session_state:
+    st.session_state.termo = "Arroz Camil"
+    st.session_state.primeira_execucao = True
+
 col_busca, col_qtd = st.columns([3, 1])
 with col_busca:
-    termo_busca = st.text_input("Buscar produto:", placeholder="Ex: Arroz, Feijão, Whey...")
+    termo_busca = st.text_input("Buscar produto:", value=st.session_state.termo, key="input_busca")
 with col_qtd:
-    qtd_limite = st.selectbox("Máximo de itens", [50, 100, 150], index=0)
+    qtd_limite = st.selectbox("Qtd Itens", [50, 100, 150], index=0)
 
 enable_debug = st.checkbox("Modo Debugger")
 
 if termo_busca:
-    with st.spinner(f"Buscando '{termo_busca}' no Atacadão..."):
+    with st.spinner(f"Buscando {termo_busca}..."):
         produtos_raw, info = buscar_atacadao(termo_busca, qtd_limite)
     
     if enable_debug:
-        st.info(f"Status: {info['status']} | Itens retornados: {info['response_len']}")
-        if info['error']: st.error(info['error'])
-        with st.expander("Dados crus (JSON)"):
+        st.info(f"URL: {info['url']} | Itens: {info['response_len']}")
+        with st.expander("JSON"):
             st.json(produtos_raw)
 
     if not produtos_raw:
-        st.warning("Nenhum item com estoque encontrado para este termo.")
+        st.warning("Nenhum item encontrado. Tente mudar o termo.")
     else:
-        st.success(f"Exibindo {len(produtos_raw)} produtos encontrados.")
         for p in produtos_raw:
             try:
-                nome = p.get('productName', 'Produto sem nome')
+                nome = p.get('productName', '')
                 link = p.get('link', '#')
+                item = p['items'][0]
+                img = item.get('images', [{}])[0].get('imageUrl', '')
+                preco = item['sellers'][0]['commertialOffer'].get('Price', 0)
                 
-                items = p.get('items', [])
-                if not items: continue
-                
-                # Pegar imagem e preço do primeiro SKU disponível
-                primeiro_item = items[0]
-                img = primeiro_item.get('images', [{}])[0].get('imageUrl', '')
-                
-                oferta = primeiro_item.get('sellers', [{}])[0].get('commertialOffer', {})
-                preco = oferta.get('Price', 0)
-                
-                calc_val, calc_label = calcular_preco_unidade(nome, preco)
+                _, calc_label = calcular_preco_unidade(nome, preco)
                 
                 st.markdown(f"""
                     <div class="product-card">
-                        <div style="min-width: 90px; text-align: center;">
-                            <img src="{img}" width="80" style="object-fit: contain; max-height: 80px;">
+                        <div style="min-width: 80px; text-align: center;">
+                            <img src="{img}" width="70">
                         </div>
                         <div style="flex: 1; margin-left: 15px;">
                             <a href="{link}" target="_blank" class="product-name"><strong>{nome}</strong></a>
                             <span class="price">R$ {preco:,.2f}</span>
-                            <span class="unit-price">{calc_label if calc_label else ""}</span>
+                            {f'<span class="unit-price">{calc_label}</span>' if calc_label else ''}
                         </div>
                         <div style="text-align: right;">
-                            <img src="{LOGO_ATACADAO_URL}" width="50">
+                            <img src="{LOGO_ATACADAO_URL}" width="40">
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
             except:
                 continue
 
-# Scroll automático para o topo ao pesquisar
 components.html("<script>window.parent.document.querySelector('.main').scrollTop = 0;</script>", height=0)
