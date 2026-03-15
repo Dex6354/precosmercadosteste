@@ -1,67 +1,89 @@
 import streamlit as st
 import requests
-import re
+import json
 
 # --- CONFIGURAÇÕES ---
-# RegionId extraído do seu HAR para a unidade de Poá - SP
-REGION_ID_POA = "v3.6358172645391"
+# Region ID e Seller extraídos dos seus parâmetros
+REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
+SELLER_ID = "atacadaobr656"
 
 def buscar_disponiveis_poa(termo):
-    # Usando o endpoint exato que você forneceu
-    url = "https://www.atacadao.com.br/api/catalog_system/pub/products/search"
+    url = "https://www.atacadao.com.br/api/graphql?operationName=ProductsQuery"
     
-    params = {
-        "ft": termo,
-        "sc": "1",
-        "regionId": REGION_ID_POA
+    # Payload baseado nos parâmetros que você forneceu
+    payload = {
+        "operationName": "ProductsQuery",
+        "variables": {
+            "first": 20,
+            "after": "0",
+            "sort": "score_desc",
+            "term": termo,
+            "selectedFacets": [
+                {"key": "region-id", "value": REGION_ID_BASE64},
+                {"key": "channel", "value": json.dumps({
+                    "salesChannel": "1",
+                    "seller": SELLER_ID,
+                    "regionId": REGION_ID_BASE64
+                })},
+                {"key": "locale", "value": "pt-BR"}
+            ]
+        }
     }
     
     headers = {
+        "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
+        "Accept": "*/*"
     }
     
     try:
-        r = requests.get(url, params=params, headers=headers, timeout=15)
-        if r.status_code not in [200, 206]:
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        if response.status_code != 200:
             return [], []
 
-        data = r.json()
+        data = response.json()
+        # Navegando na estrutura GraphQL: data -> search -> products -> edges
+        products_edges = data.get('data', {}).get('search', {}).get('products', {}).get('edges', [])
+        
         itens_disponiveis = []
-        itens_indisponiveis = [] # Para o debugger
+        itens_indisponiveis = []
 
-        for produto in data:
-            for item in produto.get('items', []):
-                for seller in item.get('sellers', []):
-                    oferta = seller.get('commertialOffer', {})
-                    
-                    # CRITÉRIOS DE DISPONIBILIDADE DO ATACADÃO
-                    preco = oferta.get('Price', 0)
-                    estoque = oferta.get('AvailableQuantity', 0)
-                    disponivel_vtex = oferta.get('IsAvailable', False)
+        for edge in products_edges:
+            node = edge.get('node', {})
+            
+            # No GraphQL do Atacadão, o preço e estoque geralmente ficam em offers
+            # Tentando extrair do primeiro item/sku disponível
+            sku = node.get('skus', [{}])[0]
+            offer = sku.get('offers', {}).get('offers', [{}])[0]
+            
+            price = offer.get('price', 0)
+            availability = offer.get('availability', "")
+            # "http://schema.org/InStock" é o padrão comum de disponibilidade
+            is_in_stock = "InStock" in availability 
 
-                    info_item = {
-                        "productId": produto.get('productId'),
-                        "productName": item.get('nameComplete'),
-                        "brand": produto.get('brand'),
-                        "price": preco,
-                        "stock": estoque,
-                        "link": produto.get('link'),
-                        "img": item.get('images', [{}])[0].get('imageUrl', '')
-                    }
+            info_item = {
+                "productId": node.get('id'),
+                "productName": node.get('name'),
+                "brand": node.get('brand', {}).get('name', 'N/A'),
+                "price": price,
+                "link": f"https://www.atacadao.com.br{node.get('slug')}/p",
+                "img": node.get('image', [{}])[0].get('url', ''),
+                "stock_status": availability
+            }
 
-                    if preco > 0 and estoque > 0 and disponivel_vtex:
-                        itens_disponiveis.append(info_item)
-                    else:
-                        itens_indisponiveis.append(info_item)
-                    break 
+            if price > 0 and is_in_stock:
+                itens_disponiveis.append(info_item)
+            else:
+                itens_indisponiveis.append(info_item)
         
         return itens_disponiveis, itens_indisponiveis
-    except:
+    except Exception as e:
+        st.error(f"Erro na requisição: {e}")
         return [], []
 
-# --- INTERFACE ---
-st.title("🛒 Atacadão - Filtro de Disponibilidade (Poá)")
+# --- INTERFACE STREAMLIT ---
+st.set_page_config(page_title="Atacadão Poá - GraphQL", layout="wide")
+st.title("🛒 Atacadão - Filtro GraphQL (Poá)")
 
 termo = st.text_input("Pesquisar produto:", value="Arroz Camil")
 
@@ -70,24 +92,23 @@ if termo:
     
     col1, col2 = st.columns(2)
     col1.metric("Itens Disponíveis", len(disponiveis))
-    col2.metric("Itens Ocultados (Sem Estoque)", len(indisponiveis))
+    col2.metric("Itens Indisponíveis/Ocultos", len(indisponiveis))
 
-    st.subheader("✅ Itens Disponíveis para Compra")
+    st.subheader("✅ Resultados Disponíveis")
     if not disponiveis:
-        st.warning("Nenhum item disponível no momento.")
+        st.warning("Nenhum item com estoque encontrado para este termo.")
     else:
         for p in disponiveis:
             with st.container():
                 c1, c2, c3 = st.columns([1, 4, 1])
-                c1.image(p['img'], width=70)
+                if p['img']:
+                    c1.image(p['img'], width=80)
                 c2.markdown(f"**{p['productName']}**")
-                c2.markdown(f"<span style='color:red; font-weight:bold;'>R$ {p['price']:,.2f}</span>", unsafe_allow_html=True)
-                c2.caption(f"ID: {p['productId']} | Marca: {p['brand']}")
-                c3.success(f"Estoque: {p['stock']}")
-                c3.link_button("Ver", p['link'])
+                c2.markdown(f"<span style='color:green; font-size:20px; font-weight:bold;'>R$ {p['price']:,.2f}</span>", unsafe_allow_html=True)
+                c2.caption(f"Marca: {p['brand']} | ID: {p['productId']}")
+                c3.link_button("Ir para o Site", p['link'])
                 st.divider()
 
-    if st.checkbox("Ver itens indisponíveis (Filtro do Site)"):
-        st.subheader("❌ Itens que a API retorna mas o site oculta")
+    if st.checkbox("Mostrar Logs de Itens Indisponíveis"):
         for p in indisponiveis:
-            st.caption(f"Indisponível: {p['productName']} (Estoque: {p['stock']} | Preço: R$ {p['price']})")
+            st.text(f"Sem estoque: {p['productName']} - Status: {p['stock_status']}")
