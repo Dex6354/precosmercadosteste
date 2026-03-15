@@ -4,7 +4,6 @@ import unicodedata
 import re
 
 # --- CONFIGURAÇÕES ---
-LOGO_ATACADAO_URL = "https://upload.wikimedia.org/wikipedia/pt/d/d3/Atacad%C3%A3o_logo.png"
 REGION_ID_POA = "v3.6358172645391"
 
 def remover_acentos(texto):
@@ -40,7 +39,6 @@ def buscar_atacadao(termo, qtd_itens=50):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json"
     }
-    
     try:
         r = requests.get(url, params=params, headers=headers, timeout=15)
         if r.status_code in [200, 206]:
@@ -50,21 +48,9 @@ def buscar_atacadao(termo, qtd_itens=50):
     return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Poá - Estoque Real", layout="wide")
+st.set_page_config(page_title="Atacadão Debugger", layout="wide")
 
-st.markdown("""
-    <style>
-        .product-card {
-            border-bottom: 1px solid #eee; padding: 15px;
-            display: flex; align-items: center; background: white;
-        }
-        .index-box { font-family: monospace; color: #888; margin-right: 15px; font-size: 1.1rem; }
-        .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
-        .details { font-size: 0.8rem; color: #666; font-family: monospace; }
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("🛒 Atacadão - Unidade Poá")
+st.title("🛒 Atacadão - Debugger de Estoque (Poá)")
 
 termo_busca = st.text_input("Pesquisar:", value="Arroz Camil")
 
@@ -74,61 +60,47 @@ if termo_busca:
     if not json_data:
         st.error("Nenhum dado retornado.")
     else:
-        # Lógica de Filtragem: Validar estoque positivo em qualquer SKU/Seller
-        produtos_validos = []
-        for p in json_data:
-            possui_estoque = False
-            try:
-                # Percorre todos os SKUs e Sellers para garantir que captamos a disponibilidade
-                for item in p.get('items', []):
-                    for seller in item.get('sellers', []):
-                        offer = seller.get('commertialOffer', {})
-                        # O segredo está no AvailableQuantity > 0 e Price > 0
-                        if offer.get('AvailableQuantity', 0) > 0 and offer.get('Price', 0) > 0:
-                            possui_estoque = True
-                            break
-                    if possui_estoque: break
-                
-                if possui_estoque:
-                    produtos_validos.append(p)
-            except:
-                continue
+        st.info(f"API retornou {len(json_data)} itens no total. Analise o status de cada um abaixo:")
 
-        st.success(f"Exibindo {len(produtos_validos)} produtos com estoque em Poá.")
-        
-        for idx, p in enumerate(produtos_validos):
+        for idx, p in enumerate(json_data):
             try:
-                p_id = p.get('productId')
-                p_name = p.get('productName')
-                brand = p.get('brand')
-                link = p.get('link', '#')
-                ref = p.get('productReference')
+                # Extração de dados para o Debugger
+                item_obj = p.get('items', [{}])[0]
+                seller_obj = item_obj.get('sellers', [{}])[0]
+                offer = seller_obj.get('commertialOffer', {})
                 
-                # Pega dados do primeiro item disponível
-                item_obj = p['items'][0]
-                img = item_obj.get('images', [{}])[0].get('imageUrl', '')
-                preco = item_obj['sellers'][0]['commertialOffer'].get('Price', 0)
+                # Campos de controle de estoque
+                available_qty = offer.get('AvailableQuantity', 0)
+                is_available = offer.get('IsAvailable', False)
+                price = offer.get('Price', 0)
                 
-                _, label_un = calcular_preco_unidade(p_name, preco)
+                # Lógica de filtro do site (suposição para teste)
+                tem_estoque_real = (available_qty > 0) and (price > 0)
 
-                st.markdown(f"""
-                    <div class="product-card">
-                        <div class="index-box">{idx}:{{</div>
-                        <img src="{img}" width="60" style="margin-right:20px">
-                        <div style="flex: 1;">
-                            <div style="font-weight: bold;">{p_name}</div>
-                            <div class="details">
-                                "productId": "{p_id}"<br>
-                                "brand": "{brand}"<br>
-                                "productReference": "{ref}"
-                            </div>
-                            <div class="price">R$ {preco:,.2f} {f'<span style="font-size:0.8rem; color:gray;">({label_un})</span>' if label_un else ''}</div>
-                        </div>
-                        <div class="index-box">}}</div>
-                        <a href="{link}" target="_blank">
-                            <button style="cursor:pointer; background:#d32f2f; color:white; border:none; padding:5px 10px; border-radius:4px;">Ver</button>
-                        </a>
-                    </div>
-                """, unsafe_allow_html=True)
+                # Container visual
+                with st.container():
+                    col1, col2 = st.columns([1, 4])
+                    
+                    with col1:
+                        img = item_obj.get('images', [{}])[0].get('imageUrl', '')
+                        if img: st.image(img, width=80)
+                    
+                    with col2:
+                        cor_status = "green" if tem_estoque_real else "red"
+                        st.markdown(f"**{p.get('productName')}**")
+                        st.markdown(f"<span style='color:{cor_status}'>● {'DISPONÍVEL NO SITE' if tem_estoque_real else 'OCULTO NO SITE'}</span>", unsafe_allow_html=True)
+                        
+                        # Painel de Debug
+                        with st.expander(f"Ver Dados Técnicos (Item {idx})"):
+                            st.json({
+                                "productId": p.get('productId'),
+                                "AvailableQuantity": available_qty,
+                                "IsAvailable": is_available,
+                                "Price": price,
+                                "SellerId": seller_obj.get('sellerId'),
+                                "listPrice": offer.get('ListPrice')
+                            })
+                st.divider()
+                
             except Exception as e:
-                continue
+                st.error(f"Erro ao processar item {idx}: {e}")
