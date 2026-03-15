@@ -7,12 +7,12 @@ import re
 # --- CONFIGURAÇÕES E CONSTANTES ---
 REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
 SELLER_ID = "atacadaobr656"
-
 LOGO_ATACADAO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-atacadao.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
 # --- FUNÇÕES DE APOIO ---
 def calcular_valor_unitario(nome, preco):
+    """Calcula R$ por kg, L ou un para ordenação."""
     padrao = r"(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|un|uni|unid)"
     match = re.search(padrao, nome, re.IGNORECASE)
     
@@ -38,12 +38,6 @@ def buscar_todos_itens_poa(termo):
     lista_itens = []
     after = 0
     first = 50
-    
-    # Normalização para busca: remove acentos e caracteres especiais para comparar
-    def normalizar(texto):
-        return re.sub(r'[^a-z0-9\s]', '', texto.lower())
-
-    termo_norm = normalizar(termo)
     
     headers = {
         "Content-Type": "application/json",
@@ -72,7 +66,6 @@ def buscar_todos_itens_poa(termo):
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=15)
             if response.status_code != 200: break
-
             data = response.json()
             products = data.get('data', {}).get('search', {}).get('products', {}).get('edges', [])
             if not products: break
@@ -81,16 +74,18 @@ def buscar_todos_itens_poa(termo):
                 node = edge.get('node', {})
                 nome_original = node.get('name', '')
                 
-                # Filtro: a palavra exata deve estar no nome (ignora Elite se buscar Leite)
-                # O regex \b garante que 'leite' não bata com 'leiteira', mas bata com 'leite moça'
-                if not re.search(rf"\b{re.escape(termo_norm)}\b", normalizar(nome_original)):
+                # --- FILTRO RIGOROSO ---
+                # Verifica se a palavra exata (ex: 'leite') está no nome, ignorando maiúsculas/minúsculas
+                # O uso de \b impede que 'leite' encontre 'elite', mas permite 'leite condensado'
+                if not re.search(rf"\b{re.escape(termo)}\b", nome_original, re.IGNORECASE):
                     continue
 
                 offers = node.get('offers', {}).get('offers', [])
                 price = offers[0].get('price', 0.0) if offers else 0.0
                 price_atacado = offers[1].get('price') if len(offers) > 1 else None
-                estoque = node.get('offers', {}).get('lowPrice', {}).get('stock', 0)
                 
+                # Pega estoque do campo correto da oferta
+                estoque = node.get('offers', {}).get('lowPrice', {}).get('stock', 0)
                 val_num, texto_medida = calcular_valor_unitario(nome_original, price)
 
                 lista_itens.append({
@@ -111,7 +106,7 @@ def buscar_todos_itens_poa(termo):
             
     return lista_itens
 
-# --- INTERFACE ---
+# --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
 st.markdown("""
@@ -133,13 +128,14 @@ termo = st.text_input("🔎 Digite o nome do produto:", "Leite").strip()
 
 if termo:
     col1, = st.columns([1])
-    with st.spinner(f"🔍 Filtrando itens com '{termo}'..."):
+    with st.spinner(f"🔍 Filtrando '{termo}'..."):
         itens = buscar_todos_itens_poa(termo)
+        # Ordenação crescente pelo preço calculado por medida (kg/L/un)
         itens = sorted(itens, key=lambda x: x['price_unit_val'])
 
     with col1:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_ATACADAO_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></h5>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(itens)} itens encontrados.</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(itens)} itens encontrados para '{termo}'.</small>", unsafe_allow_html=True)
         
         for p in itens:
             img = p['img'] or DEFAULT_IMAGE_URL
