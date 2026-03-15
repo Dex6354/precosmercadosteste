@@ -50,7 +50,7 @@ def buscar_atacadao(termo, qtd_itens=50):
     return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Poá - Disponíveis", layout="wide")
+st.set_page_config(page_title="Atacadão Poá - Estoque Real", layout="wide")
 
 st.markdown("""
     <style>
@@ -61,11 +61,10 @@ st.markdown("""
         .index-box { font-family: monospace; color: #888; margin-right: 15px; font-size: 1.1rem; }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
         .details { font-size: 0.8rem; color: #666; font-family: monospace; }
-        .out-of-stock { color: #999; font-style: italic; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 Atacadão - Apenas Disponíveis (Poá)")
+st.title("🛒 Atacadão - Unidade Poá")
 
 termo_busca = st.text_input("Pesquisar:", value="Arroz Camil")
 
@@ -75,20 +74,29 @@ if termo_busca:
     if not json_data:
         st.error("Nenhum dado retornado.")
     else:
-        # Filtragem por disponibilidade
-        produtos_disponiveis = []
+        # Lógica de Filtragem: Validar estoque positivo em qualquer SKU/Seller
+        produtos_validos = []
         for p in json_data:
+            possui_estoque = False
             try:
-                offer = p['items'][0]['sellers'][0]['commertialOffer']
-                # Só adiciona se houver estoque e preço maior que zero
-                if offer.get('IsAvailable') and offer.get('Price', 0) > 0:
-                    produtos_disponiveis.append(p)
+                # Percorre todos os SKUs e Sellers para garantir que captamos a disponibilidade
+                for item in p.get('items', []):
+                    for seller in item.get('sellers', []):
+                        offer = seller.get('commertialOffer', {})
+                        # O segredo está no AvailableQuantity > 0 e Price > 0
+                        if offer.get('AvailableQuantity', 0) > 0 and offer.get('Price', 0) > 0:
+                            possui_estoque = True
+                            break
+                    if possui_estoque: break
+                
+                if possui_estoque:
+                    produtos_validos.append(p)
             except:
                 continue
 
-        st.success(f"Encontrados {len(produtos_disponiveis)} produtos disponíveis para compra em Poá.")
+        st.success(f"Exibindo {len(produtos_validos)} produtos com estoque em Poá.")
         
-        for idx, p in enumerate(produtos_disponiveis):
+        for idx, p in enumerate(produtos_validos):
             try:
                 p_id = p.get('productId')
                 p_name = p.get('productName')
@@ -96,9 +104,10 @@ if termo_busca:
                 link = p.get('link', '#')
                 ref = p.get('productReference')
                 
+                # Pega dados do primeiro item disponível
                 item_obj = p['items'][0]
                 img = item_obj.get('images', [{}])[0].get('imageUrl', '')
-                preco = item_obj.get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 0)
+                preco = item_obj['sellers'][0]['commertialOffer'].get('Price', 0)
                 
                 _, label_un = calcular_preco_unidade(p_name, preco)
 
