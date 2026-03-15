@@ -1,111 +1,188 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import requests
-import unicodedata
-import re
+import json
+import time
 
-# --- CONFIGURAÇÕES EXTRAÍDAS DO HAR ---
-# URL da página de busca (Next.js App Router)
-URL_ACTION = "https://www.xsupermercados.com.br/buscar?texto="
-# ID da Server Action identificada no seu log/HAR
-ACTION_ID = "b5240a22b66e2990db00381bcd0e987be41e7f34"
+# --- CONFIGURAÇÕES E CONSTANTES ---
+REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
+SELLER_ID = "atacadaobr656"
 
-HEADERS_X = {
-    "Accept": "text/x-component",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-    "Accept-Language": "pt-BR,pt;q=0.5",
-    "Content-Type": "text/plain;charset=UTF-8",
-    "Next-Action": ACTION_ID,
-    "Origin": "https://www.xsupermercados.com.br",
-    "Referer": "https://www.xsupermercados.com.br/buscar?texto=banana",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
-    "Priority": "u=1, i"
-}
+LOGO_ATACADAO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-atacadao.png"
+DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
-# --- LÓGICA DE EXTRAÇÃO ---
-def buscar_x_supermercados(termo):
-    # O Next.js Server Action recebe os argumentos como um array formatado em string
-    payload = f'["{termo}"]'
+# --- LÓGICA DE EXTRAÇÃO (ATACADÃO) ---
+def buscar_todos_itens_poa(termo):
+    url = "https://www.atacadao.com.br/api/graphql?operationName=ProductsQuery"
+    lista_itens = []
+    after = 0
+    first = 50  # Buscando 50 por vez para ser mais rápido
     
-    try:
-        # A requisição deve ser POST para o endpoint da página com o parâmetro de texto
-        response = requests.post(
-            f"{URL_ACTION}{termo}", 
-            headers=HEADERS_X, 
-            data=payload, 
-            timeout=15
-        )
-        
-        if response.status_code == 200:
-            # O Next.js retorna um stream formatado. Procuramos a linha que contém o JSON de sucesso.
-            for linha in response.text.split('\n'):
-                if '{"success":true' in linha:
-                    # Extrair apenas a parte do JSON da linha (removendo o prefixo do stream ex: "1:")
-                    json_inicio = linha.find('{')
-                    import json
-                    data = json.loads(linha[json_inicio:])
-                    # No sistema Applay/Next do X, os itens vêm em data -> produtos
-                    return data.get('data', {}).get('produtos', []), None
-            return [], "Resposta do servidor não continha dados válidos."
-        
-        return [], f"Erro {response.status_code}: {response.text[:100]}"
-    except Exception as e:
-        return [], str(e)
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "*/*"
+    }
 
-# --- UTILITÁRIOS ---
-def remover_acentos(texto):
-    if not texto: return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
+    while True:
+        payload = {
+            "operationName": "ProductsQuery",
+            "variables": {
+                "first": first,
+                "after": str(after),
+                "sort": "score_desc",
+                "term": termo,
+                "selectedFacets": [
+                    {"key": "region-id", "value": REGION_ID_BASE64},
+                    {"key": "channel", "value": json.dumps({
+                        "salesChannel": "1",
+                        "seller": SELLER_ID,
+                        "regionId": REGION_ID_BASE64
+                    })},
+                    {"key": "locale", "value": "pt-BR"}
+                ]
+            }
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=15)
+            if response.status_code != 200:
+                break
 
-def slugify(text):
-    text = remover_acentos(text)
-    text = re.sub(r'[^a-z0-9\s-]', '', text).strip()
-    return re.sub(r'[-\s]+', '-', text)
+            data = response.json()
+            products = data.get('data', {}).get('search', {}).get('products', {}).get('edges', [])
+            
+            if not products:
+                break  # Para se não houver mais produtos
+            
+            for edge in products:
+                node = edge.get('node', {})
+                offers = node.get('offers', {}).get('offers', [])
+                
+                price = 0.0
+                price_atacado = None
+                
+                if offers:
+                    # Tenta pegar preço de varejo e atacado
+                    price = offers[0].get('price', 0.0)
+                    if len(offers) > 1:
+                        price_atacado = offers[1].get('price')
+
+                lista_itens.append({
+                    "productName": node.get('name', 'N/A'),
+                    "brand": node.get('brand', {}).get('name', 'N/A'),
+                    "price": price,
+                    "price_atacado": price_atacado,
+                    "link": f"https://www.atacadao.com.br{node.get('slug')}/p",
+                    "img": node.get('image', [{}])[0].get('url', '')
+                })
+
+            total_count = data.get('data', {}).get('search', {}).get('products', {}).get('pageInfo', {}).get('totalCount', 0)
+            
+            after += first
+            if after >= total_count:
+                break
+                
+        except Exception as e:
+            st.error(f"Erro ao processar API: {e}")
+            break
+            
+    return lista_itens
 
 # --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="X Supermercados", layout="wide")
+st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
 st.markdown("""
     <style>
-        .product-card { display: flex; align-items: center; gap: 15px; padding: 10px; border-bottom: 1px solid #eee; }
-        .price { color: #2e7d32; font-weight: bold; font-size: 1.1em; }
+        .block-container { padding-top: 0rem; }
+        footer {visibility: hidden;}
+        #MainMenu {visibility: hidden;}
+        div, span, strong, small { font-size: 0.75rem !important; }
+        img { max-width: 100px; height: auto; }
+        .product-container { display: flex; align-items: center; gap: 10px; }
+        .product-image { min-width: 80px; max-width: 80px; flex-shrink: 0; }
+        .product-info { flex: 1 1 auto; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
+        hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
+        .info-cinza { color: gray; font-size: 0.8rem; }
+        [data-testid="stColumn"] {
+            overflow-y: auto; max-height: 90vh; padding: 10px; border: 1px solid #f0f2f6; border-radius: 8px;
+            max-width: 480px; margin-left: auto; margin-right: auto; background: transparent;
+            scrollbar-width: thin; scrollbar-color: gray transparent;
+        }
+        [data-testid="stColumn"]::-webkit-scrollbar { width: 6px; background: transparent; }
+        [data-testid="stColumn"]::-webkit-scrollbar-track { background: transparent; }
+        [data-testid="stColumn"]::-webkit-scrollbar-thumb { background-color: gray; border-radius: 3px; border: 1px solid transparent; }
+        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover { background-color: white; }
+        .block-container { padding-right: 47px !important; padding-bottom: 15px !important; margin-bottom: 15px !important; }
+        input[type="text"] { font-size: 0.8rem !important; }
+        [data-testid="stColumn"] { margin-bottom: 20px; }
+        header[data-testid="stHeader"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 X Supermercados")
-termo_input = st.text_input("Pesquisar produto:", "Banana").strip()
+st.markdown("<h6>🛒 Preços Mercados - Atacadão</h6>", unsafe_allow_html=True)
+termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
-if termo_input:
-    palavras_chave = remover_acentos(termo_input).split()
-    
-    with st.spinner("A consultar servidor (Server Action)..."):
-        produtos_raw, erro = buscar_x_supermercados(termo_input)
+if termo:
+    # Cria uma coluna centralizada seguindo a mesma estrutura do estilofinal
+    col1, = st.columns([1])
+
+    with st.spinner("🔍 Buscando no mercado..."):
+        itens_atacadao = buscar_todos_itens_poa(termo)
         
-        if erro:
-            st.error(f"Falha: {erro}")
-        else:
-            # Filtragem manual por palavras-chave
-            x_final = [p for p in produtos_raw if all(k in remover_acentos(p.get('nome','')) for k in palavras_chave)]
-            
-            st.write(f"🔎 Encontrados: {len(x_final)}")
-            for p in x_final:
-                img = p.get('imagem_principal') or "https://via.placeholder.com/80"
-                # Gerar URL amigável do produto
-                link = f"https://www.xsupermercados.com.br/produto/{p.get('id')}/{slugify(p.get('nome',''))}"
-                
-                st.markdown(f"""
-                    <div class='product-card'>
-                        <img src='{img}' width='80'>
-                        <div>
-                            <a href='{link}' target='_blank' style='text-decoration:none; color:black;'>
-                                <b>{p.get('nome')}</b>
-                            </a><br>
-                            <span class='price'>R$ {float(p.get('preco_venda', 0)):.2f}</span>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
+        # Ordenando por preço do varejo
+        itens_atacadao = sorted(itens_atacadao, key=lambda x: x['price'])
 
-components.html("<script>window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]').forEach(col => col.scrollTop = 0);</script>", height=0)
+    with col1:
+        st.markdown(f"""
+            <h5 style="display: flex; align-items: center; justify-content: center;">
+            <img src="{LOGO_ATACADAO_URL}" width="80" alt="Atacadão" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+            </h5>
+        """, unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(itens_atacadao)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        
+        if not itens_atacadao:
+            st.warning("Nenhum produto encontrado.")
+            
+        for p in itens_atacadao:
+            img = p['img'] if p.get('img') else DEFAULT_IMAGE_URL
+            
+            nome = p['productName']
+            preco_normal = p['price']
+            preco_atacado = p['price_atacado']
+            marca = p['brand']
+            
+            # Formatação de preços
+            if preco_atacado and preco_atacado < preco_normal:
+                preco_html = f"<div><b>R$ {preco_normal:.2f}</b> <span style='color:gray;'>(Varejo)</span></div><div><b style='color: green;'>R$ {preco_atacado:.2f}</b> <span style='color:gray;'>(Atacado)</span></div>".replace('.', ',')
+            else:
+                preco_html = f"<div><b>R$ {preco_normal:.2f}</b></div>".replace('.', ',')
+
+            # Renderização do card HTML exatamente como no estilofinal
+            st.markdown(f"""
+                <div class='product-container'>
+                    <a href='{p['link']}' target='_blank' class='product-image' style='text-decoration:none;'>
+                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
+                        <img src='{LOGO_ATACADAO_URL}' width='80' 
+                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
+                    </a>
+                    <div class='product-info'>
+                        <div style='margin-bottom: 4px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{nome}</b></a></div>
+                        <div style='font-size:0.85em;'>{preco_html}</div>
+                        <div style='color:gray; font-size:0.75em; margin-top:2px;'>Marca: {marca}</div>
+                    </div>
+                </div>
+                <hr class='product-separator' />
+            """, unsafe_allow_html=True)
+
+    # --- FORÇAR ROLAGEM PARA O TOPO ---
+    components.html(
+        f"""
+        <script>
+            const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
+            cols.forEach(col => col.scrollTop = 0);
+        </script>
+        """,
+        height=0,
+        width=0
+    )
