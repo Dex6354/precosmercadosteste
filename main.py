@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import requests
 import json
-import time
+import re
 
 # --- CONFIGURAÇÕES E CONSTANTES ---
 REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
@@ -11,12 +11,33 @@ SELLER_ID = "atacadaobr656"
 LOGO_ATACADAO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-atacadao.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
+# --- FUNÇÃO AUXILIAR PARA PREÇO POR MEDIDA ---
+def extrair_preco_medida(nome, preco):
+    """Tenta extrair a quantidade (kg, g, l, ml, un) e calcular o valor unitário."""
+    padrao = r"(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|un|uni|unid)"
+    match = re.search(padrao, nome, re.IGNORECASE)
+    if match and preco > 0:
+        qtd = float(match.group(1).replace(',', '.'))
+        unidade = match.group(2).lower()
+        
+        if unidade == 'g':
+            valor = (preco / qtd) * 1000
+            return f"R$ {valor:.2f}/kg".replace('.', ',')
+        elif unidade == 'ml':
+            valor = (preco / qtd) * 1000
+            return f"R$ {valor:.2f}/L".replace('.', ',')
+        elif unidade in ['kg', 'l', 'un', 'uni', 'unid']:
+            valor = preco / qtd
+            suffix = 'un' if 'un' in unidade else unidade
+            return f"R$ {valor:.2f}/{suffix}".replace('.', ',')
+    return ""
+
 # --- LÓGICA DE EXTRAÇÃO (ATACADÃO) ---
 def buscar_todos_itens_poa(termo):
     url = "https://www.atacadao.com.br/api/graphql?operationName=ProductsQuery"
     lista_itens = []
     after = 0
-    first = 50  # Buscando 50 por vez para ser mais rápido
+    first = 50
     
     headers = {
         "Content-Type": "application/json",
@@ -53,7 +74,7 @@ def buscar_todos_itens_poa(termo):
             products = data.get('data', {}).get('search', {}).get('products', {}).get('edges', [])
             
             if not products:
-                break  # Para se não houver mais produtos
+                break
             
             for edge in products:
                 node = edge.get('node', {})
@@ -63,7 +84,6 @@ def buscar_todos_itens_poa(termo):
                 price_atacado = None
                 
                 if offers:
-                    # Tenta pegar preço de varejo e atacado
                     price = offers[0].get('price', 0.0)
                     if len(offers) > 1:
                         price_atacado = offers[1].get('price')
@@ -73,12 +93,11 @@ def buscar_todos_itens_poa(termo):
                     "brand": node.get('brand', {}).get('name', 'N/A'),
                     "price": price,
                     "price_atacado": price_atacado,
-                    "link": f"https://www.atacadao.com.br{node.get('slug')}/p",
+                    "link": f"https://www.atacadao.com.br/{node.get('slug')}/p",  # Corrigido: Adicionada a barra
                     "img": node.get('image', [{}])[0].get('url', '')
                 })
 
             total_count = data.get('data', {}).get('search', {}).get('products', {}).get('pageInfo', {}).get('totalCount', 0)
-            
             after += first
             if after >= total_count:
                 break
@@ -103,19 +122,12 @@ st.markdown("""
         .product-image { min-width: 80px; max-width: 80px; flex-shrink: 0; }
         .product-info { flex: 1 1 auto; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
         hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
-        .info-cinza { color: gray; font-size: 0.8rem; }
+        .info-cinza { color: gray; font-size: 0.75rem; }
         [data-testid="stColumn"] {
             overflow-y: auto; max-height: 90vh; padding: 10px; border: 1px solid #f0f2f6; border-radius: 8px;
             max-width: 480px; margin-left: auto; margin-right: auto; background: transparent;
             scrollbar-width: thin; scrollbar-color: gray transparent;
         }
-        [data-testid="stColumn"]::-webkit-scrollbar { width: 6px; background: transparent; }
-        [data-testid="stColumn"]::-webkit-scrollbar-track { background: transparent; }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb { background-color: gray; border-radius: 3px; border: 1px solid transparent; }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover { background-color: white; }
-        .block-container { padding-right: 47px !important; padding-bottom: 15px !important; margin-bottom: 15px !important; }
-        input[type="text"] { font-size: 0.8rem !important; }
-        [data-testid="stColumn"] { margin-bottom: 20px; }
         header[data-testid="stHeader"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
@@ -124,13 +136,10 @@ st.markdown("<h6>🛒 Preços Mercados - Atacadão</h6>", unsafe_allow_html=True
 termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
 if termo:
-    # Cria uma coluna centralizada seguindo a mesma estrutura do estilofinal
     col1, = st.columns([1])
 
     with st.spinner("🔍 Buscando no mercado..."):
         itens_atacadao = buscar_todos_itens_poa(termo)
-        
-        # Ordenando por preço do varejo
         itens_atacadao = sorted(itens_atacadao, key=lambda x: x['price'])
 
     with col1:
@@ -141,48 +150,39 @@ if termo:
         """, unsafe_allow_html=True)
         st.markdown(f"<small>🔎 {len(itens_atacadao)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
         
-        if not itens_atacadao:
-            st.warning("Nenhum produto encontrado.")
-            
         for p in itens_atacadao:
             img = p['img'] if p.get('img') else DEFAULT_IMAGE_URL
-            
             nome = p['productName']
             preco_normal = p['price']
             preco_atacado = p['price_atacado']
-            marca = p['brand']
             
-            # Formatação de preços
+            # Cálculo de preço unitário/medida
+            medida_info = extrair_preco_medida(nome, preco_normal)
+            medida_html = f"<div class='info-cinza'>{medida_info}</div>" if medida_info else ""
+            
             if preco_atacado and preco_atacado < preco_normal:
-                preco_html = f"<div><b>R$ {preco_normal:.2f}</b> <span style='color:gray;'>(Varejo)</span></div><div><b style='color: green;'>R$ {preco_atacado:.2f}</b> <span style='color:gray;'>(Atacado)</span></div>".replace('.', ',')
+                preco_html = f"<div><b>R$ {preco_normal:.2f}</b> <span class='info-cinza'>(Varejo)</span></div><div><b style='color: green;'>R$ {preco_atacado:.2f}</b> <span class='info-cinza'>(Atacado)</span></div>".replace('.', ',')
             else:
                 preco_html = f"<div><b>R$ {preco_normal:.2f}</b></div>".replace('.', ',')
 
-            # Renderização do card HTML exatamente como no estilofinal
             st.markdown(f"""
                 <div class='product-container'>
                     <a href='{p['link']}' target='_blank' class='product-image' style='text-decoration:none;'>
-                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
+                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; display: block;'/>
                         <img src='{LOGO_ATACADAO_URL}' width='80' 
-                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
+                            style='background-color: white; display: block; border-top: 1.5px solid black; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
                     </a>
                     <div class='product-info'>
-                        <div style='margin-bottom: 4px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{nome}</b></a></div>
-                        <div style='font-size:0.85em;'>{preco_html}</div>
-                        <div style='color:gray; font-size:0.75em; margin-top:2px;'>Marca: {marca}</div>
+                        <div style='margin-bottom: 2px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{nome}</b></a></div>
+                        {medida_html}
+                        <div style='font-size:0.85em; margin-top:4px;'>{preco_html}</div>
+                        <div class='info-cinza' style='margin-top:2px;'>Marca: {p['brand']}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # --- FORÇAR ROLAGEM PARA O TOPO ---
     components.html(
-        f"""
-        <script>
-            const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
-            cols.forEach(col => col.scrollTop = 0);
-        </script>
-        """,
-        height=0,
-        width=0
+        "<script>window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]').forEach(col => col.scrollTop = 0);</script>",
+        height=0, width=0
     )
