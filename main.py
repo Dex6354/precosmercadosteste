@@ -40,8 +40,6 @@ def buscar_todos_itens_poa(termo_busca):
     after = 0
     first = 50
     
-    # Criar uma lista de regex para cada palavra digitada
-    # Isso permite que "Arroz" e "Camil" sejam validados de forma independente
     palavras = termo_busca.split()
     filtros_regex = [re.compile(rf"\b{re.escape(p)}\b", re.IGNORECASE) for p in palavras]
 
@@ -81,17 +79,19 @@ def buscar_todos_itens_poa(termo_busca):
                 node = edge.get('node', {})
                 nome_produto = node.get('name', '')
                 
-                # Validação: O nome do produto deve conter TODAS as palavras pesquisadas
                 if all(regex.search(nome_produto) for regex in filtros_regex):
-                    offers = node.get('offers', {}).get('offers', [])
-                    price = offers[0].get('price', 0.0) if offers else 0.0
-                    price_atacado = offers[1].get('price') if len(offers) > 1 else None
+                    offers_data = node.get('offers', {}).get('offers', [])
+                    price = offers_data[0].get('price', 0.0) if offers_data else 0.0
+                    price_atacado = offers_data[1].get('price') if len(offers_data) > 1 else None
+                    
+                    # Extração do estoque (Inventory)
+                    estoque = offers_data[0].get('inventory', 0) if offers_data else 0
                     
                     val_num, texto_medida = calcular_valor_unitario(nome_produto, price)
 
                     lista_itens.append({
                         "productName": nome_produto,
-                        "brand": node.get('brand', {}).get('name', 'N/A'),
+                        "inventory": int(estoque),
                         "price": price,
                         "price_atacado": price_atacado,
                         "price_unit_val": val_num, 
@@ -129,13 +129,13 @@ termo_input = st.text_input("🔎 Digite o nome do produto:", "Arroz Camil").str
 
 if termo_input:
     col1, = st.columns([1])
-    with st.spinner("🔍 Analisando termos da busca..."):
+    with st.spinner("🔍 Buscando estoque e preços..."):
         itens = buscar_todos_itens_poa(termo_input)
         itens = sorted(itens, key=lambda x: x['price_unit_val'])
 
     with col1:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_ATACADAO_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></h5>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(itens)} itens encontrados para '{termo_input}'</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(itens)} itens encontrados</small>", unsafe_allow_html=True)
         
         for p in itens:
             img = p['img'] or DEFAULT_IMAGE_URL
@@ -158,7 +158,7 @@ if termo_input:
                         <div style='margin-bottom:2px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['productName']}</b></a></div>
                         {medida_html}
                         <div style='margin-top:4px;'>{preco_html}</div>
-                        <div class='info-cinza'>Marca: {p['brand']}</div>
+                        <div class='info-cinza'>Estoque: {p['inventory']} un</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
