@@ -3,8 +3,11 @@ import requests
 import unicodedata
 import re
 
-# --- CONFIGURAÇÕES ---
-REGION_ID_POA = "v3.6358172645391"
+# --- CONFIGURAÇÕES DE SESSÃO (CONFORME SOLICITADO) ---
+# Unidade Poá: Seller 656
+REGION_ID_POA = "v3.6358172645391" 
+SALES_CHANNEL = "1"
+SELLER_ID_POA = "atacadaobr656"
 
 def remover_acentos(texto):
     if not texto: return ""
@@ -28,17 +31,22 @@ def calcular_preco_unidade(descricao, preco_total):
 
 def buscar_atacadao(termo, qtd_itens=50):
     url = "https://www.atacadao.com.br/api/catalog_system/pub/products/search"
+    
+    # Inclusão dos parâmetros de validação de canal de venda e região
     params = {
         "ft": termo,
         "_from": 0,
         "_to": qtd_itens - 1,
-        "sc": 1,
+        "sc": SALES_CHANNEL,
         "regionId": REGION_ID_POA
     }
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Cookie": f"vtex_segment=sn={SALES_CHANNEL}&regionId={REGION_ID_POA};" # Simula a sessão validada
     }
+    
     try:
         r = requests.get(url, params=params, headers=headers, timeout=15)
         if r.status_code in [200, 206]:
@@ -48,9 +56,10 @@ def buscar_atacadao(termo, qtd_itens=50):
     return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Debugger", layout="wide")
+st.set_page_config(page_title="Atacadão Poá - Validação de Estoque", layout="wide")
 
-st.title("🛒 Atacadão - Debugger de Estoque (Poá)")
+st.title("🛒 Atacadão - Pesquisa com Validação de Sessão")
+st.caption(f"Loja: {SELLER_ID_POA} | Region: {REGION_ID_POA} | Canal: {SALES_CHANNEL}")
 
 termo_busca = st.text_input("Pesquisar:", value="Arroz Camil")
 
@@ -58,49 +67,64 @@ if termo_busca:
     json_data = buscar_atacadao(termo_busca)
     
     if not json_data:
-        st.error("Nenhum dado retornado.")
+        st.error("Nenhum dado retornado pela API.")
     else:
-        st.info(f"API retornou {len(json_data)} itens no total. Analise o status de cada um abaixo:")
-
-        for idx, p in enumerate(json_data):
+        # FILTRAGEM RIGOROSA (O QUE O SITE FAZ)
+        produtos_disponiveis = []
+        for p in json_data:
+            possui_estoque = False
             try:
-                # Extração de dados para o Debugger
-                item_obj = p.get('items', [{}])[0]
-                seller_obj = item_obj.get('sellers', [{}])[0]
-                offer = seller_obj.get('commertialOffer', {})
+                # O site valida se o seller específico (656) tem o item disponível
+                for item in p.get('items', []):
+                    for seller in item.get('sellers', []):
+                        # Valida se o vendedor é o de Poá ou se é o vendedor principal (1) com estoque
+                        if seller.get('sellerId') in [SELLER_ID_POA, "1"]:
+                            offer = seller.get('commertialOffer', {})
+                            if offer.get('AvailableQuantity', 0) > 0 and offer.get('Price', 0) > 0:
+                                possui_estoque = True
+                                break
+                    if possui_estoque: break
                 
-                # Campos de controle de estoque
-                available_qty = offer.get('AvailableQuantity', 0)
-                is_available = offer.get('IsAvailable', False)
-                price = offer.get('Price', 0)
-                
-                # Lógica de filtro do site (suposição para teste)
-                tem_estoque_real = (available_qty > 0) and (price > 0)
+                if possui_estoque:
+                    produtos_disponiveis.append(p)
+            except:
+                continue
 
-                # Container visual
-                with st.container():
-                    col1, col2 = st.columns([1, 4])
-                    
-                    with col1:
-                        img = item_obj.get('images', [{}])[0].get('imageUrl', '')
-                        if img: st.image(img, width=80)
-                    
-                    with col2:
-                        cor_status = "green" if tem_estoque_real else "red"
-                        st.markdown(f"**{p.get('productName')}**")
-                        st.markdown(f"<span style='color:{cor_status}'>● {'DISPONÍVEL NO SITE' if tem_estoque_real else 'OCULTO NO SITE'}</span>", unsafe_allow_html=True)
-                        
-                        # Painel de Debug
-                        with st.expander(f"Ver Dados Técnicos (Item {idx})"):
-                            st.json({
-                                "productId": p.get('productId'),
-                                "AvailableQuantity": available_qty,
-                                "IsAvailable": is_available,
-                                "Price": price,
-                                "SellerId": seller_obj.get('sellerId'),
-                                "listPrice": offer.get('ListPrice')
-                            })
-                st.divider()
+        st.success(f"Encontrados {len(produtos_disponiveis)} produtos disponíveis no site para Poá.")
+        
+        # Listagem
+        for idx, p in enumerate(json_data):
+            # Determinamos se o item deve ser exibido ou apenas depurado
+            item_obj = p.get('items', [{}])[0]
+            seller_main = item_obj.get('sellers', [{}])[0]
+            offer = seller_main.get('commertialOffer', {})
+            
+            disponivel = (offer.get('AvailableQuantity', 0) > 0 and offer.get('Price', 0) > 0)
+            
+            with st.container():
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    img = item_obj.get('images', [{}])[0].get('imageUrl', '')
+                    if img: st.image(img, width=70)
                 
-            except Exception as e:
-                st.error(f"Erro ao processar item {idx}: {e}")
+                with col2:
+                    status_text = "✅ DISPONÍVEL" if disponivel else "❌ INDISPONÍVEL (OCULTO NO SITE)"
+                    st.markdown(f"**{p.get('productName')}**")
+                    st.markdown(f"<small>{status_text}</small>", unsafe_allow_html=True)
+                    
+                    if disponivel:
+                        preco = offer.get('Price', 0)
+                        _, label_un = calcular_preco_unidade(p.get('productName'), preco)
+                        st.markdown(f"<span style='color:red; font-weight:bold;'>R$ {preco:,.2f}</span> <small>{label_un if label_un else ''}</small>", unsafe_allow_html=True)
+
+                    # DEBUGGER POR ITEM
+                    with st.expander("Debug JSON"):
+                        st.json({
+                            "ProductName": p.get('productName'),
+                            "AvailableQuantity": offer.get('AvailableQuantity'),
+                            "IsAvailable": offer.get('IsAvailable'),
+                            "Price": offer.get('Price'),
+                            "SellerId": seller_main.get('sellerId'),
+                            "RegionId_Request": REGION_ID_POA
+                        })
+            st.divider()
