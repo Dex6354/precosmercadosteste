@@ -5,13 +5,24 @@ import unicodedata
 import re
 import time
 import json
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURAÇÕES E CONSTANTES ---
 REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
 SELLER_ID = "atacadaobr656"
-LOGO_ATACADAO_URL = "https://logodownload.org/wp-content/uploads/2019/07/atacadao-logo.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
+
+# Função para carregar a logo local e converter para base64
+def get_base64_logo(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return f"data:image/png;base64,{base64.b64encode(data).decode()}"
+    except:
+        return ""
+
+LOGO_ATACADAO_B64 = get_base64_logo("logo-atacadao.png")
 
 # --- FUNÇÕES UTILITÁRIAS ---
 def remover_acentos(texto):
@@ -52,12 +63,11 @@ def calcular_preco_unidade(descricao, preco_total):
     if match_ml:
         litros = float(match_ml.group(1).replace(',', '.')) / 1000
         return preco_total / litros, f"R$ {preco_total / litros:.2f}".replace('.', ',') + "/L"
-    # Unidades (Ovos, etc)
+    # Unidades
     match_un = re.search(r'(\d+)\s*(unidades|un|ovos|c/|com)', desc_minus)
     if match_un and int(match_un.group(1)) > 0:
         qtd = int(match_un.group(1))
         return preco_total / qtd, f"R$ {preco_total / qtd:.2f}".replace('.', ',') + "/un"
-    
     return None, None
 
 # --- REQUISIÇÃO ATACADÃO ---
@@ -66,10 +76,7 @@ def buscar_atacadao(termo):
     payload = {
         "operationName": "ProductsQuery",
         "variables": {
-            "first": 50,
-            "after": "0",
-            "sort": "score_desc",
-            "term": termo,
+            "first": 50, "after": "0", "sort": "score_desc", "term": termo,
             "selectedFacets": [
                 {"key": "region-id", "value": REGION_ID_BASE64},
                 {"key": "channel", "value": json.dumps({"salesChannel": "1", "seller": SELLER_ID, "regionId": REGION_ID_BASE64})},
@@ -77,10 +84,7 @@ def buscar_atacadao(termo):
             ]
         }
     }
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
+    headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=15)
         if r.status_code == 200:
@@ -122,62 +126,42 @@ if termo_input:
 
     with st.spinner("🔍 Buscando no Atacadão..."):
         raw_results = []
-        for t in termos_busca:
-            raw_results.extend(buscar_atacadao(t))
+        for t in termos_busca: raw_results.extend(buscar_atacadao(t))
         
         vistos = set()
         atacadao_final = []
-        
         for edge in raw_results:
             node = edge.get('node', {})
-            pid = node.get('id')
-            nome = node.get('name', '')
-            
+            pid, nome = node.get('id'), node.get('name', '')
             if pid and pid not in vistos and all(k in remover_acentos(nome) for k in palavras_chave):
                 vistos.add(pid)
-                
-                # Preços
                 offers = node.get('offers', {}).get('offers', [])
                 preco_varejo = offers[0].get('price', 0) if offers else 0
                 preco_atacado = offers[1].get('price', 0) if len(offers) > 1 else None
-                
-                # Unidade/Calculo
                 val_unit, label_unit = calcular_preco_unidade(nome, preco_varejo)
                 
-                item = {
-                    'nome': nome,
-                    'preco': preco_varejo,
-                    'preco_atacado': preco_atacado,
+                atacadao_final.append({
+                    'nome': nome, 'preco': preco_varejo, 'preco_atacado': preco_atacado,
                     'url': f"https://www.atacadao.com.br{node.get('slug')}/p",
                     'img': node.get('image', [{}])[0].get('url', DEFAULT_IMAGE_URL),
-                    'label_unit': label_unit,
-                    'sort_val': val_unit or preco_varejo
-                }
-                atacadao_final.append(item)
-        
+                    'label_unit': label_unit, 'sort_val': val_unit or preco_varejo
+                })
         atacadao_final = sorted(atacadao_final, key=lambda x: x['sort_val'] or 999)
 
-    # Exibição
-    col1, col2 = st.columns(2) # Mantendo 2 colunas para simular o estilo original
-    
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-            <img src="{LOGO_ATACADAO_URL}" width="100" alt="Atacadão" style="background-color: white; border-radius: 4px; padding: 5px;"/>
+            <img src="{LOGO_ATACADAO_B64}" width="100" alt="Atacadão" style="background-color: white; border-radius: 4px; padding: 5px;"/>
             </h5>
         """, unsafe_allow_html=True)
         st.markdown(f"<small>🔎 {len(atacadao_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
-
-        if not atacadao_final:
-            st.warning("Nenhum produto encontrado.")
 
         for p in atacadao_final:
             preco_html = f"<div><b>R$ {p['preco']:.2f}</b>".replace('.', ',') + "</div>"
             if p['preco_atacado']:
                 preco_html += f"<div style='color:green; font-size:0.7em;'>Atacado: R$ {p['preco_atacado']:.2f}</div>".replace('.', ',')
             
-            preco_extra = f"<div style='color:gray; font-size:0.75em;'>{p['label_unit']}</div>" if p['label_unit'] else ""
-
             st.markdown(f"""
                 <div class='product-container'>
                     <a href='{p['url']}' target='_blank' class='product-image' style='text-decoration:none;'>
@@ -186,14 +170,10 @@ if termo_input:
                     <div class='product-info'>
                         <div style='margin-bottom: 4px;'><a href='{p['url']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['nome']}</b></a></div>
                         <div style='font-size:0.85em;'>{preco_html}</div>
-                        <div style='font-size:0.85em;'>{preco_extra}</div>
+                        <div style='font-size:0.85em; color:gray;'>{p['label_unit'] if p['label_unit'] else ''}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # Reset Scroll Script
-    components.html(
-        f"""<script>const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]'); cols.forEach(col => col.scrollTop = 0);</script>""",
-        height=0, width=0
-    )
+    components.html(f"<script>const cols = window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]'); cols.forEach(col => col.scrollTop = 0);</script>", height=0)
