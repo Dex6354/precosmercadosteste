@@ -8,15 +8,13 @@ import re
 SHOP_SLUG = "xsupermercados"
 API_BASE = "https://api-xsupermercados.applay.tech/api2/ecommerce"
 
-# Cabeçalhos obrigatórios identificados no tráfego da rede
 HEADERS_BASE = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/plain, */*",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "X-Shop-Slug": SHOP_SLUG,
     "Origin": "https://www.xsupermercados.com.br",
     "Referer": "https://www.xsupermercados.com.br/",
-    "Sec-GPC": "1"
 }
 
 LOGO_X_URL = "https://www.xsupermercados.com.br/assets/images/logo.png"
@@ -25,24 +23,21 @@ DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-im
 # --- FUNÇÕES DE API ---
 
 def obter_sessao():
-    """Gera um token de sessão dinâmico via endpoint eauth/session."""
     url = f"{API_BASE}/eauth/session"
     try:
-        # A API Applay exige um POST mesmo para gerar a sessão inicial
+        # Importante: enviar um dicionário vazio {} no json para evitar 401 em alguns endpoints Applay
         r = requests.post(url, headers=HEADERS_BASE, json={}, timeout=10)
         if r.status_code == 200:
             return r.json().get('token'), None
-        return None, f"Erro Sessão: {r.status_code} - {r.text}"
+        return None, f"Erro {r.status_code}: {r.text}"
     except Exception as e:
         return None, str(e)
 
 def buscar_produtos_x(termo, token):
-    """Realiza a busca de produtos utilizando o Bearer Token."""
     url = f"{API_BASE}/enav/produtos_buscar"
     headers = HEADERS_BASE.copy()
     headers["Authorization"] = f"Bearer {token}"
     
-    # Parâmetros padrão de busca do X Supermercados
     payload = {
         "termo": termo,
         "loja_id": 1,
@@ -53,12 +48,10 @@ def buscar_produtos_x(termo, token):
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=15)
         if r.status_code == 200:
-            data = r.json()
-            # A API retorna os produtos em uma lista dentro da chave 'produtos'
-            return data.get('produtos', []), r.status_code, None
-        return [], r.status_code, r.text
+            return r.json().get('produtos', []), None
+        return [], f"Erro {r.status_code}: {r.text}"
     except Exception as e:
-        return [], 0, str(e)
+        return [], str(e)
 
 # --- UTILITÁRIOS ---
 def remover_acentos(texto):
@@ -76,9 +69,9 @@ st.set_page_config(page_title="X Supermercados", layout="wide")
 
 st.markdown("""
     <style>
-        .product-container { display: flex; align-items: center; gap: 15px; padding: 10px; border-bottom: 1px solid #eee; }
-        .product-image { min-width: 80px; max-width: 80px; height: 80px; object-fit: contain; }
-        .price-tag { color: #2e7d32; font-weight: bold; font-size: 1.1em; }
+        .product-container { display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid #eee; }
+        .product-info { flex-grow: 1; }
+        .price { color: #2e7d32; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -88,25 +81,23 @@ termo_input = st.text_input("🔎 Pesquisar:", "Banana").strip()
 if termo_input:
     palavras_chave = remover_acentos(termo_input).split()
     
-    with st.spinner("Conectando ao X Supermercados..."):
+    with st.spinner("Autenticando..."):
         token, erro_sessao = obter_sessao()
         
         if token:
-            produtos_raw, status, erro_busca = buscar_produtos_x(termo_input, token)
+            produtos_raw, erro_busca = buscar_produtos_x(termo_input, token)
             
-            with st.expander("🐞 Debug Técnico"):
-                st.code(f"Token: {token[:30]}...")
-                st.write(f"Status API: {status}")
+            with st.expander("🐞 Debugger"):
+                st.write(f"Token: `{token[:20]}...`")
                 if erro_busca: st.error(erro_busca)
+                elif produtos_raw: st.write(f"Itens brutos: {len(produtos_raw)}")
 
             x_final = []
             for p in produtos_raw:
                 nome = p.get('nome', '')
                 if all(k in remover_acentos(nome) for k in palavras_chave):
                     preco = float(p.get('preco_venda', 0))
-                    # Construção da URL do produto baseada no padrão do site
-                    id_prod = p.get('id')
-                    p['url_final'] = f"https://www.xsupermercados.com.br/produto/{id_prod}/{slugify(nome)}"
+                    p['url_final'] = f"https://www.xsupermercados.com.br/produto/{p.get('id')}/{slugify(nome)}"
                     p['preco_fmt'] = f"R$ {preco:.2f}".replace('.', ',')
                     x_final.append(p)
 
@@ -116,14 +107,12 @@ if termo_input:
                 img = p.get('imagem_principal') or DEFAULT_IMAGE_URL
                 st.markdown(f"""
                     <div class='product-container'>
-                        <a href='{p['url_final']}' target='_blank'>
-                            <img src='{img}' class='product-image'/>
-                        </a>
-                        <div>
+                        <img src='{img}' width='70'/>
+                        <div class='product-info'>
                             <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:black;'>
                                 <b>{p.get('nome')}</b>
                             </a><br>
-                            <span class='price-tag'>{p['preco_fmt']}</span>
+                            <span class='price'>{p['preco_fmt']}</span>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
