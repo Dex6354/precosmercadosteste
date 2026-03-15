@@ -13,7 +13,6 @@ DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-im
 
 # --- FUNÇÕES DE APOIO ---
 def calcular_valor_unitario(nome, preco):
-    """Retorna o valor numérico para ordenação e a string formatada."""
     padrao = r"(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|un|uni|unid)"
     match = re.search(padrao, nome, re.IGNORECASE)
     
@@ -40,9 +39,11 @@ def buscar_todos_itens_poa(termo):
     after = 0
     first = 50
     
-    # Prepara regex para busca exata da palavra inteira (case insensitive)
-    # O \b garante que a palavra não seja parte de outra (ex: 'elite' não bate com 'leite')
-    regex_filtro = re.compile(rf"\b{re.escape(termo)}\b", re.IGNORECASE)
+    # Normalização para busca: remove acentos e caracteres especiais para comparar
+    def normalizar(texto):
+        return re.sub(r'[^a-z0-9\s]', '', texto.lower())
+
+    termo_norm = normalizar(termo)
     
     headers = {
         "Content-Type": "application/json",
@@ -78,23 +79,22 @@ def buscar_todos_itens_poa(termo):
             
             for edge in products:
                 node = edge.get('node', {})
-                nome_produto = node.get('name', '')
-
-                # --- FILTRO DE PALAVRA INTEIRA ---
-                if not regex_filtro.search(nome_produto):
+                nome_original = node.get('name', '')
+                
+                # Filtro: a palavra exata deve estar no nome (ignora Elite se buscar Leite)
+                # O regex \b garante que 'leite' não bata com 'leiteira', mas bata com 'leite moça'
+                if not re.search(rf"\b{re.escape(termo_norm)}\b", normalizar(nome_original)):
                     continue
 
                 offers = node.get('offers', {}).get('offers', [])
                 price = offers[0].get('price', 0.0) if offers else 0.0
                 price_atacado = offers[1].get('price') if len(offers) > 1 else None
-                
-                # Coleta o estoque (disponível em node > offers > lowPrice > stock)
                 estoque = node.get('offers', {}).get('lowPrice', {}).get('stock', 0)
                 
-                val_num, texto_medida = calcular_valor_unitario(nome_produto, price)
+                val_num, texto_medida = calcular_valor_unitario(nome_original, price)
 
                 lista_itens.append({
-                    "productName": nome_produto,
+                    "productName": nome_original,
                     "price": price,
                     "price_atacado": price_atacado,
                     "price_unit_val": val_num, 
@@ -129,28 +129,27 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados - Atacadão</h6>", unsafe_allow_html=True)
-termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
+termo = st.text_input("🔎 Digite o nome do produto:", "Leite").strip()
 
 if termo:
     col1, = st.columns([1])
-    with st.spinner(f"🔍 Filtrando por '{termo}'..."):
+    with st.spinner(f"🔍 Filtrando itens com '{termo}'..."):
         itens = buscar_todos_itens_poa(termo)
         itens = sorted(itens, key=lambda x: x['price_unit_val'])
 
     with col1:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_ATACADAO_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></h5>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(itens)} itens encontrados para '{termo}'.</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(itens)} itens encontrados.</small>", unsafe_allow_html=True)
         
         for p in itens:
             img = p['img'] or DEFAULT_IMAGE_URL
             medida_html = f"<div style='color:#007bff; font-weight:bold;'>{p['medida_txt']}</div>" if p['medida_txt'] else ""
             
             p_normal = f"R$ {p['price']:.2f}".replace('.', ',')
+            preco_html = f"<div><b>{p_normal}</b></div>"
             if p['price_atacado']:
                 p_atacado = f"R$ {p['price_atacado']:.2f}".replace('.', ',')
-                preco_html = f"<div><b>{p_normal}</b> <span class='info-cinza'>(Varejo)</span></div><div><b style='color:green;'>{p_atacado}</b> <span class='info-cinza'>(Atacado)</span></div>"
-            else:
-                preco_html = f"<div><b>{p_normal}</b></div>"
+                preco_html += f"<div><b style='color:green;'>{p_atacado}</b> <span class='info-cinza'>(Atacado)</span></div>"
 
             st.markdown(f"""
                 <div class='product-container'>
