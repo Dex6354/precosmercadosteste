@@ -7,12 +7,13 @@ import re
 # --- CONFIGURAÇÕES E CONSTANTES ---
 REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
 SELLER_ID = "atacadaobr656"
+
 LOGO_ATACADAO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-atacadao.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
-# --- FUNÇÕES DE APOIO ---
+# --- FUNÇÕES DE CÁLCULO E FILTRAGEM ---
 def calcular_valor_unitario(nome, preco):
-    """Calcula R$ por kg, L ou un para ordenação."""
+    """Retorna o valor numérico do preço por medida para ordenação e a string formatada."""
     padrao = r"(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|un|uni|unid)"
     match = re.search(padrao, nome, re.IGNORECASE)
     
@@ -39,6 +40,10 @@ def buscar_todos_itens_poa(termo):
     after = 0
     first = 50
     
+    # Regex para encontrar a palavra exata (ignora "Elite" ao buscar "Leite")
+    # \b representa o limite da palavra
+    regex_filtro = re.compile(rf"\b{re.escape(termo)}\b", re.IGNORECASE)
+
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -66,38 +71,33 @@ def buscar_todos_itens_poa(termo):
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=15)
             if response.status_code != 200: break
+
             data = response.json()
             products = data.get('data', {}).get('search', {}).get('products', {}).get('edges', [])
             if not products: break
             
             for edge in products:
                 node = edge.get('node', {})
-                nome_original = node.get('name', '')
+                nome_produto = node.get('name', '')
                 
-                # --- FILTRO RIGOROSO ---
-                # Verifica se a palavra exata (ex: 'leite') está no nome, ignorando maiúsculas/minúsculas
-                # O uso de \b impede que 'leite' encontre 'elite', mas permite 'leite condensado'
-                if not re.search(rf"\b{re.escape(termo)}\b", nome_original, re.IGNORECASE):
-                    continue
+                # Validação direta: só adiciona se o termo for uma palavra inteira no nome
+                if regex_filtro.search(nome_produto):
+                    offers = node.get('offers', {}).get('offers', [])
+                    price = offers[0].get('price', 0.0) if offers else 0.0
+                    price_atacado = offers[1].get('price') if len(offers) > 1 else None
+                    
+                    val_num, texto_medida = calcular_valor_unitario(nome_produto, price)
 
-                offers = node.get('offers', {}).get('offers', [])
-                price = offers[0].get('price', 0.0) if offers else 0.0
-                price_atacado = offers[1].get('price') if len(offers) > 1 else None
-                
-                # Pega estoque do campo correto da oferta
-                estoque = node.get('offers', {}).get('lowPrice', {}).get('stock', 0)
-                val_num, texto_medida = calcular_valor_unitario(nome_original, price)
-
-                lista_itens.append({
-                    "productName": nome_original,
-                    "price": price,
-                    "price_atacado": price_atacado,
-                    "price_unit_val": val_num, 
-                    "medida_txt": texto_medida,
-                    "stock": estoque,
-                    "link": f"https://www.atacadao.com.br/{node.get('slug')}/p",
-                    "img": node.get('image', [{}])[0].get('url', '')
-                })
+                    lista_itens.append({
+                        "productName": nome_produto,
+                        "brand": node.get('brand', {}).get('name', 'N/A'),
+                        "price": price,
+                        "price_atacado": price_atacado,
+                        "price_unit_val": val_num, 
+                        "medida_txt": texto_medida,
+                        "link": f"https://www.atacadao.com.br/{node.get('slug')}/p",
+                        "img": node.get('image', [{}])[0].get('url', '')
+                    })
 
             total_count = data.get('data', {}).get('search', {}).get('products', {}).get('pageInfo', {}).get('totalCount', 0)
             after += first
@@ -106,7 +106,7 @@ def buscar_todos_itens_poa(termo):
             
     return lista_itens
 
-# --- INTERFACE STREAMLIT ---
+# --- INTERFACE ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
 
 st.markdown("""
@@ -124,28 +124,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados - Atacadão</h6>", unsafe_allow_html=True)
-termo = st.text_input("🔎 Digite o nome do produto:", "Leite").strip()
+termo_input = st.text_input("🔎 Digite o nome do produto:", "Leite").strip()
 
-if termo:
+if termo_input:
     col1, = st.columns([1])
-    with st.spinner(f"🔍 Filtrando '{termo}'..."):
-        itens = buscar_todos_itens_poa(termo)
-        # Ordenação crescente pelo preço calculado por medida (kg/L/un)
+    with st.spinner("🔍 Filtrando resultados exatos..."):
+        itens = buscar_todos_itens_poa(termo_input)
         itens = sorted(itens, key=lambda x: x['price_unit_val'])
 
     with col1:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_ATACADAO_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></h5>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(itens)} itens encontrados para '{termo}'.</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(itens)} itens encontrados para '{termo_input}'</small>", unsafe_allow_html=True)
         
         for p in itens:
             img = p['img'] or DEFAULT_IMAGE_URL
             medida_html = f"<div style='color:#007bff; font-weight:bold;'>{p['medida_txt']}</div>" if p['medida_txt'] else ""
             
             p_normal = f"R$ {p['price']:.2f}".replace('.', ',')
-            preco_html = f"<div><b>{p_normal}</b></div>"
             if p['price_atacado']:
                 p_atacado = f"R$ {p['price_atacado']:.2f}".replace('.', ',')
-                preco_html += f"<div><b style='color:green;'>{p_atacado}</b> <span class='info-cinza'>(Atacado)</span></div>"
+                preco_html = f"<div><b>{p_normal}</b> <span class='info-cinza'>(Varejo)</span></div><div><b style='color:green;'>{p_atacado}</b> <span class='info-cinza'>(Atacado)</span></div>"
+            else:
+                preco_html = f"<div><b>{p_normal}</b></div>"
 
             st.markdown(f"""
                 <div class='product-container'>
@@ -157,7 +157,7 @@ if termo:
                         <div style='margin-bottom:2px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['productName']}</b></a></div>
                         {medida_html}
                         <div style='margin-top:4px;'>{preco_html}</div>
-                        <div class='info-cinza'>Estoque: {int(p['stock'])} un</div>
+                        <div class='info-cinza'>Marca: {p['brand']}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
