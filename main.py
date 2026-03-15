@@ -17,12 +17,12 @@ def buscar_todos_produtos_poa(termo):
     itens_disponiveis = []
     itens_indisponiveis = []
     
-    # Controle de paginação
     items_per_page = 20
     current_after = 0
-    tem_mais_paginas = True
+    total_encontrado = 0
+    primeira_busca = True
 
-    while tem_mais_paginas:
+    while primeira_busca or current_after < total_encontrado:
         payload = {
             "operationName": "ProductsQuery",
             "variables": {
@@ -39,7 +39,9 @@ def buscar_todos_produtos_poa(termo):
                     })},
                     {"key": "locale", "value": "pt-BR"}
                 ]
-            }
+            },
+            # Query explícita para garantir que o totalCount e os nós venham corretamente
+            "query": "query ProductsQuery($first: Int, $after: String, $sort: String, $term: String, $selectedFacets: [SelectedFacetInput]) { search(first: $first, after: $after, sort: $sort, term: $term, selectedFacets: $selectedFacets) { products { pageInfo { totalCount } edges { node { id name slug brand { name } image { url } skus { offers { offers { price availability } } } } } } } }"
         }
 
         try:
@@ -48,20 +50,28 @@ def buscar_todos_produtos_poa(termo):
                 break
 
             data = response.json()
-            search_data = data.get('data', {}).get('search', {})
-            products_edges = search_data.get('products', {}).get('edges', [])
+            search_result = data.get('data', {}).get('search', {}).get('products', {})
             
-            # Se não retornar mais itens, para o loop
-            if not products_edges:
-                tem_mais_paginas = False
+            if primeira_busca:
+                total_encontrado = search_result.get('pageInfo', {}).get('totalCount', 0)
+                primeira_busca = False
+                if total_encontrado == 0:
+                    break
+
+            edges = search_result.get('edges', [])
+            if not edges:
                 break
 
-            for edge in products_edges:
+            for edge in edges:
                 node = edge.get('node', {})
                 skus = node.get('skus', [])
                 if not skus: continue
                 
-                offer = skus[0].get('offers', {}).get('offers', [{}])[0]
+                # Extração segura de preço e estoque
+                offers_list = skus[0].get('offers', {}).get('offers', [])
+                if not offers_list: continue
+                
+                offer = offers_list[0]
                 price = offer.get('price', 0)
                 availability = offer.get('availability', "")
                 is_in_stock = "InStock" in availability 
@@ -81,48 +91,39 @@ def buscar_todos_produtos_poa(termo):
                 else:
                     itens_indisponiveis.append(info_item)
 
-            # Verifica se chegamos ao fim com base no total de produtos
-            total_count = search_data.get('products', {}).get('pageInfo', {}).get('totalCount', 0)
             current_after += items_per_page
-            
-            if current_after >= total_count:
-                tem_mais_paginas = False
 
         except Exception as e:
-            st.error(f"Erro na requisição: {e}")
+            st.error(f"Erro: {e}")
             break
             
     return itens_disponiveis, itens_indisponiveis
 
-# --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Atacadão Poá - Full Search", layout="wide")
-st.title("🛒 Atacadão - Busca Completa (Poá)")
+# --- INTERFACE ---
+st.set_page_config(page_title="Atacadão Poá - Full", layout="wide")
+st.title("🛒 Busca Atacadão (Todas as Páginas)")
 
-termo = st.text_input("Pesquisar produto:", value="Banana")
+termo = st.text_input("Produto:", value="Banana")
 
 if termo:
-    with st.spinner(f"Buscando todos os itens para '{termo}'..."):
-        disponiveis, indisponiveis = buscar_todos_produtos_poa(termo)
+    with st.spinner(f"Vasculhando o catálogo para '{termo}'..."):
+        disp, indisp = buscar_todos_produtos_poa(termo)
     
-    col1, col2 = st.columns(2)
-    col1.metric("Itens Disponíveis", len(disponiveis))
-    col2.metric("Total Encontrado (incluindo ocultos)", len(disponiveis) + len(indisponiveis))
+    c1, c2 = st.columns(2)
+    c1.metric("Disponíveis", len(disp))
+    c2.metric("Total no Catálogo", len(disp) + len(indisp))
 
-    st.subheader(f"✅ Resultados para '{termo}'")
-    if not disponiveis:
-        st.warning("Nenhum item com estoque encontrado.")
+    if not disp:
+        st.warning("Nada disponível com estoque no momento.")
     else:
-        for p in disponiveis:
+        for p in disp:
             with st.container():
-                c1, c2, c3 = st.columns([1, 4, 1])
-                if p['img']:
-                    c1.image(p['img'], width=80)
-                c2.markdown(f"**{p['productName']}**")
-                c2.markdown(f"<span style='color:green; font-size:20px; font-weight:bold;'>R$ {p['price']:,.2f}</span>", unsafe_allow_html=True)
-                c2.caption(f"Marca: {p['brand']} | ID: {p['productId']}")
-                c3.link_button("Ir para o Site", p['link'])
+                col_img, col_txt, col_btn = st.columns([1, 4, 1])
+                if p['img']: col_img.image(p['img'], width=80)
+                col_txt.markdown(f"**{p['productName']}**")
+                col_txt.markdown(f"**R$ {p['price']:,.2f}**")
+                col_btn.link_button("Ver site", p['link'])
                 st.divider()
 
-    if st.checkbox("Mostrar Itens Sem Estoque"):
-        for p in indisponiveis:
-            st.text(f"Sem estoque: {p['productName']} - Status: {p['stock_status']}")
+    if st.checkbox("Ver log de indisponíveis"):
+        st.write(indisp)
