@@ -11,9 +11,9 @@ SELLER_ID = "atacadaobr656"
 LOGO_ATACADAO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-atacadao.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
-# --- FUNÇÕES DE CÁLCULO E EXTRAÇÃO ---
+# --- FUNÇÕES DE APOIO ---
 def calcular_valor_unitario(nome, preco):
-    """Retorna o valor numérico do preço por medida para ordenação e a string formatada."""
+    """Retorna o valor numérico para ordenação e a string formatada."""
     padrao = r"(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|un|uni|unid)"
     match = re.search(padrao, nome, re.IGNORECASE)
     
@@ -32,13 +32,17 @@ def calcular_valor_unitario(nome, preco):
             suffix = 'un' if 'un' in unidade else unidade
             return valor, f"R$ {valor:.2f}/{suffix}".replace('.', ',')
             
-    return float('inf'), "" # Retorna 'inf' para itens sem medida ficarem por último
+    return float('inf'), ""
 
 def buscar_todos_itens_poa(termo):
     url = "https://www.atacadao.com.br/api/graphql?operationName=ProductsQuery"
     lista_itens = []
     after = 0
     first = 50
+    
+    # Prepara regex para busca exata da palavra inteira (case insensitive)
+    # O \b garante que a palavra não seja parte de outra (ex: 'elite' não bate com 'leite')
+    regex_filtro = re.compile(rf"\b{re.escape(termo)}\b", re.IGNORECASE)
     
     headers = {
         "Content-Type": "application/json",
@@ -74,20 +78,28 @@ def buscar_todos_itens_poa(termo):
             
             for edge in products:
                 node = edge.get('node', {})
+                nome_produto = node.get('name', '')
+
+                # --- FILTRO DE PALAVRA INTEIRA ---
+                if not regex_filtro.search(nome_produto):
+                    continue
+
                 offers = node.get('offers', {}).get('offers', [])
                 price = offers[0].get('price', 0.0) if offers else 0.0
                 price_atacado = offers[1].get('price') if len(offers) > 1 else None
                 
-                # Obtém valor numérico para ordenação e texto para exibição
-                val_num, texto_medida = calcular_valor_unitario(node.get('name', ''), price)
+                # Coleta o estoque (disponível em node > offers > lowPrice > stock)
+                estoque = node.get('offers', {}).get('lowPrice', {}).get('stock', 0)
+                
+                val_num, texto_medida = calcular_valor_unitario(nome_produto, price)
 
                 lista_itens.append({
-                    "productName": node.get('name', 'N/A'),
-                    "brand": node.get('brand', {}).get('name', 'N/A'),
+                    "productName": nome_produto,
                     "price": price,
                     "price_atacado": price_atacado,
                     "price_unit_val": val_num, 
                     "medida_txt": texto_medida,
+                    "stock": estoque,
                     "link": f"https://www.atacadao.com.br/{node.get('slug')}/p",
                     "img": node.get('image', [{}])[0].get('url', '')
                 })
@@ -121,14 +133,13 @@ termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
 if termo:
     col1, = st.columns([1])
-    with st.spinner("🔍 Buscando e calculando..."):
+    with st.spinner(f"🔍 Filtrando por '{termo}'..."):
         itens = buscar_todos_itens_poa(termo)
-        # ORDENAÇÃO: Prioriza o preço por unidade/kg/litro
         itens = sorted(itens, key=lambda x: x['price_unit_val'])
 
     with col1:
         st.markdown(f"<h5 style='text-align:center;'><img src='{LOGO_ATACADAO_URL}' width='80' style='background:white; padding:3px; border-radius:4px;'/></h5>", unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(itens)} itens (Ordenado por R$/Medida)</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(itens)} itens encontrados para '{termo}'.</small>", unsafe_allow_html=True)
         
         for p in itens:
             img = p['img'] or DEFAULT_IMAGE_URL
@@ -151,7 +162,7 @@ if termo:
                         <div style='margin-bottom:2px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p['productName']}</b></a></div>
                         {medida_html}
                         <div style='margin-top:4px;'>{preco_html}</div>
-                        <div class='info-cinza'>Marca: {p['brand']}</div>
+                        <div class='info-cinza'>Estoque: {int(p['stock'])} un</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
