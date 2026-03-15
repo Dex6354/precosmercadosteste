@@ -7,16 +7,19 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURAÇÕES E CONSTANTES ---
-ORG_ID = "131" 
-# Nota: Tokens de APIs baseadas em JWT expiram. Se parar de funcionar, o token precisa ser renovado.
+# Nota: O ORG_ID 131 é referente ao X Supermercados. 
+# Se o status da API for 401 ou 403, o TOKEN abaixo expirou.
+ORG_ID = "131"
 TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTMxIn0.y6W8Q-Hn7A9V8_R4X2Q_Z1z7G8"
 
 HEADERS_X = {
     "Authorization": f"Bearer {TOKEN}",
     "organizationid": ORG_ID,
     "domainkey": "www.xsupermercados.com.br",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://www.xsupermercados.com.br",
+    "Referer": "https://www.xsupermercados.com.br/"
 }
 
 LOGO_X_URL = "https://www.xsupermercados.com.br/assets/images/logo.png"
@@ -39,85 +42,115 @@ def slugify(text):
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-# --- REQUISIÇÕES COM DEBUG ---
+# --- LÓGICA DE EXTRAÇÃO COM DEBUG ---
 def buscar_pagina_x(termo, pagina):
-    # Endpoint padrão da VipCommerce para o X
+    # Rota padrão de busca da VipCommerce
     url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo}?page={pagina}"
     try:
         r = requests.get(url, headers=HEADERS_X, timeout=15)
-        if r.status_code == 200:
-            data = r.json()
-            return data.get('data', {}).get('produtos', []), r.status_code, None
-        return [], r.status_code, r.text
+        status = r.status_code
+        if status == 200:
+            return r.json().get('data', {}).get('produtos', []), status, None
+        return [], status, r.text
     except Exception as e:
         return [], 0, str(e)
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Debug X Supermercados", page_icon="🛒", layout="wide")
 
-# CSS omitido para brevidade (mantido igual ao original)
-st.markdown("<style>.product-container { display: flex; align-items: center; gap: 10px; } .product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }</style>", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+        .block-container { padding-top: 0rem; }
+        .product-container { display: flex; align-items: center; gap: 10px; }
+        .product-image { min-width: 80px; max-width: 80px; }
+        hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
+        [data-testid="stColumn"] {
+            overflow-y: auto; max-height: 80vh; padding: 15px; border: 1px solid #f0f2f6; border-radius: 8px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-st.markdown("### 🛠 Debugger: X Supermercados")
-termo = st.text_input("🔎 Digite o produto:", "Banana").strip()
+st.markdown("### 🛠 Debugger - X Supermercados")
+termo_input = st.text_input("🔎 Pesquisar produto:", "Banana").strip()
 
-if termo:
-    termos_busca = gerar_formas_variantes(remover_acentos(termo))
-    palavras_chave = remover_acentos(termo).split()
+if termo_input:
+    termos_busca = gerar_formas_variantes(remover_acentos(termo_input))
+    palavras_chave = remover_acentos(termo_input).split()
     
     with st.spinner("🔍 Consultando API..."):
         raw_x = []
-        debug_info = []
+        logs_debug = []
         
-        # Busca sequencial simples para facilitar o debug (pode voltar para ThreadPool depois)
+        # Busca nas 2 primeiras páginas para os termos variantes
         for t in termos_busca:
-            produtos, status, erro = buscar_pagina_x(t, 1)
-            debug_info.append({"termo": t, "status": status, "qtd_retornada": len(produtos), "erro_bruto": erro[:200] if erro else "Nenhum"})
-            raw_x.extend(produtos)
+            for p_num in range(1, 3):
+                produtos, status, erro = buscar_pagina_x(t, p_num)
+                logs_debug.append({
+                    "termo": t, 
+                    "página": p_num, 
+                    "status": status, 
+                    "itens": len(produtos),
+                    "erro": erro[:100] if erro else "OK"
+                })
+                if produtos:
+                    raw_x.extend(produtos)
+                else:
+                    break # Se a p1 falhar, não tenta a p2
 
-        # Exibe Painel de Debugger
-        with st.expander("🐞 Visualizar Logs da API"):
-            st.write(debug_info)
+        # --- PAINEL DE DEBUG ---
+        with st.expander("🐞 Ver Logs Técnicos (Debugger)"):
+            st.write("**Histórico de Requisições:**")
+            st.table(logs_debug)
             if raw_x:
-                st.write("Exemplo do 1º item retornado:", raw_x[0])
+                st.write("**Exemplo do primeiro item bruto recebido:**")
+                st.json(raw_x[0])
+            else:
+                st.error("A API não retornou nenhum dado. Verifique se o TOKEN no código ainda é válido.")
 
         # Processamento e Filtro
-        vistos_x = set()
+        vistos = set()
         x_final = []
         for p in raw_x:
             pid = p.get('id')
-            if pid and pid not in vistos_x:
-                vistos_x.add(pid)
+            if pid and pid not in vistos and p.get("disponivel", True):
+                vistos.add(pid)
                 desc = p.get('descricao', '')
-                # Se o filtro de palavras-chave estiver matando os resultados, avisamos aqui
+                # Filtro rigoroso de palavras-chave
                 if all(k in remover_acentos(desc) for k in palavras_chave):
                     oferta = p.get('oferta') or {}
-                    preco_oferta = oferta.get('preco_oferta')
-                    preco_base = p.get('preco') or 0
-                    preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
+                    preco_final = float(oferta.get('preco_oferta') if (p.get('em_oferta') and oferta.get('preco_oferta')) else p.get('preco', 0))
                     
                     p['url_final'] = f"https://www.xsupermercados.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
                     p['preco_final'] = preco_final
                     x_final.append(p)
 
-        if not x_final:
-            st.error("Nenhum item passou pelos filtros de busca. Verifique se as palavras-chave coincidem com a descrição da API acima.")
+        x_final = sorted(x_final, key=lambda x: x['preco_final'])
 
-    # Exibição dos cards
+    # --- EXIBIÇÃO ---
     col1, = st.columns([1])
     with col1:
-        st.markdown(f"**{len(x_final)} produtos filtrados**")
+        st.markdown(f"<center><img src='{LOGO_X_URL}' width='150'></center>", unsafe_allow_html=True)
+        st.write(f"🔎 {len(x_final)} produtos encontrados (após filtros).")
+        
+        if not x_final and raw_x:
+            st.warning("A API retornou itens, mas nenhum condiz exatamente com as palavras digitadas.")
+
         for p in x_final:
             img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
+            
             st.markdown(f"""
                 <div class='product-container'>
-                    <img src='{img}' width='60' />
+                    <a href='{p['url_final']}' target='_blank' class='product-image'>
+                        <img src='{img}' width='80' style='border-radius:5px; background:white;'/>
+                    </a>
                     <div class='product-info'>
-                        <a href='{p['url_final']}' target='_blank'><b>{p.get('descricao')}</b></a><br>
-                        R$ {p['preco_final']:.2f}
+                        <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:black;'>
+                            <b>{p.get('descricao')}</b>
+                        </a><br>
+                        <span style='font-size:1.1em; color:green;'><b>R$ {p['preco_final']:.2f}</b></span>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    components.html(f"<script>window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]').forEach(col => col.scrollTop = 0);</script>", height=0)
+    components.html("<script>window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]').forEach(col => col.scrollTop = 0);</script>", height=0)
