@@ -19,9 +19,10 @@ HEADERS_BASE = {
 
 # --- FUNÇÕES DE API ---
 
-def iniciar_sessao():
-    """Inicializa a sessão enviando o payload completo conforme o log do usuário."""
+def obter_sessao_validada():
+    """Gera o token de acesso utilizando o payload de sessão do usuário."""
     url = f"{API_BASE}/eauth/session"
+    # Payload rigoroso extraído do seu log de sucesso
     payload = {
         "session": {
             "loja": {
@@ -34,8 +35,7 @@ def iniciar_sessao():
                 "platform": "web",
                 "uuid": "dfdf4d49-0ab9-4aab-ba11-dcbb47ac542d"
             },
-            "modality": "Retirada",
-            "position": {"lat": -23.5275546, "lng": -46.336035}
+            "modality": "Retirada"
         }
     }
     try:
@@ -47,7 +47,7 @@ def iniciar_sessao():
         return None, str(e)
 
 def buscar_produtos_x(termo, token):
-    """Busca produtos utilizando o token de sessão e o cabeçalho X-Session-Token."""
+    """Realiza a busca de produtos com o token JWT validado."""
     url = f"{API_BASE}/enav/produtos_buscar"
     headers = HEADERS_BASE.copy()
     headers["Authorization"] = f"Bearer {token}"
@@ -64,7 +64,7 @@ def buscar_produtos_x(termo, token):
         r = requests.post(url, headers=headers, json=payload, timeout=15)
         if r.status_code == 200:
             return r.json().get('produtos', []), None
-        return [], f"Erro {r.status_code}: {r.text}"
+        return [], f"Erro na busca: {r.status_code}"
     except Exception as e:
         return [], str(e)
 
@@ -79,30 +79,32 @@ def slugify(text):
     text = re.sub(r'[-\s]+', '-', text)
     return text
 
-# --- INTERFACE ---
+# --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="X Supermercados", layout="wide")
 
 st.markdown("""
     <style>
-        .product-card { display: flex; align-items: center; gap: 15px; padding: 10px; border-bottom: 1px solid #eee; }
+        .product-card { display: flex; align-items: center; gap: 15px; padding: 12px; border-bottom: 1px solid #eee; background: white; }
+        .product-info { flex-grow: 1; }
         .price { color: #2e7d32; font-weight: bold; font-size: 1.2em; }
+        .brand { color: #666; font-size: 0.85em; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 X Supermercados")
-termo_input = st.text_input("Pesquisar produto:", "Banana").strip()
+termo_input = st.text_input("O que você procura hoje?", "Banana").strip()
 
 if termo_input:
     palavras_chave = remover_acentos(termo_input).split()
     
-    with st.spinner("Autenticando sessão..."):
-        token, erro_s = iniciar_sessao()
+    with st.spinner("Sincronizando com a loja de Poá..."):
+        token, erro_s = obter_sessao_validada()
         
         if token:
             produtos_raw, erro_b = buscar_produtos_x(termo_input, token)
             
             if erro_b:
-                st.error(f"Erro na busca: {erro_b}")
+                st.error(erro_b)
             else:
                 x_final = []
                 for p in produtos_raw:
@@ -113,22 +115,26 @@ if termo_input:
                         p['preco_fmt'] = f"R$ {preco:.2f}".replace('.', ',')
                         x_final.append(p)
 
-                st.write(f"🔎 Encontrados: {len(x_final)}")
+                st.subheader(f"🔎 {len(x_final)} produtos encontrados")
 
                 for p in x_final:
-                    img = p.get('imagem_principal') or "https://via.placeholder.com/80"
+                    img = p.get('imagem_principal') or "https://via.placeholder.com/100"
                     st.markdown(f"""
                         <div class='product-card'>
-                            <img src='{img}' width='80'>
-                            <div>
+                            <a href='{p['url_final']}' target='_blank'>
+                                <img src='{img}' width='90' style='border-radius: 4px;'>
+                            </a>
+                            <div class='product-info'>
                                 <a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:black;'>
                                     <b>{p.get('nome')}</b>
                                 </a><br>
+                                <span class='brand'>Ref: {p.get('id')}</span><br>
                                 <span class='price'>{p['preco_fmt']}</span>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.error(f"Falha na autenticação: {erro_s}")
+            st.error(f"Não foi possível validar a sessão: {erro_s}")
 
+# Script para manter o foco no topo após nova busca
 components.html("<script>window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]').forEach(col => col.scrollTop = 0);</script>", height=0)
