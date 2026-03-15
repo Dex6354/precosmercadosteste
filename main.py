@@ -4,114 +4,115 @@ import unicodedata
 import re
 
 # --- CONFIGURAÇÕES ---
-LOGO_ATACADAO_URL = "https://upload.wikimedia.org/wikipedia/pt/d/d3/Atacad%C3%A3o_logo.png"
+# O ID da Política Comercial (sc) costuma mudar por região. 
+# Para POA, tentaremos o sc=2 ou sc=3, mas o ideal é capturar o cookie de localização.
+DEFAULT_SC_POA = "1" 
 
 def remover_acentos(texto):
     if not texto: return ""
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
 
-def calcular_preco_unidade(descricao, preco_total):
-    desc_minus = remover_acentos(descricao)
-    m_kg = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo|g|gramas?|l|litros?|ml)', desc_minus)
-    if m_kg:
-        try:
-            valor = float(m_kg.group(1).replace(',', '.'))
-            unidade = m_kg.group(2)
-            if unidade in ['g', 'grama', 'gramas', 'ml']:
-                valor /= 1000
-            if valor > 0:
-                preco_un = preco_total / valor
-                sufixo = "/kg" if unidade[0] in ['k', 'g'] else "/L"
-                return preco_un, f"R$ {preco_un:.2f}{sufixo}"
-        except: pass
-    return None, None
-
-def buscar_atacadao(termo, qtd_itens=50):
+def buscar_atacadao(termo, sc_param, cookie_texto, qtd_itens=50):
     url = "https://www.atacadao.com.br/api/catalog_system/pub/products/search"
+    
     params = {
         "ft": termo,
         "_from": 0,
         "_to": qtd_itens - 1,
-        "sc": 1 
+        "sc": sc_param  # Canal de Vendas (Loja específica)
     }
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Cookie": cookie_texto # Aqui injetamos a localização (ex: vtex_segment, VTEXSC)
     }
+    
+    debug_info = {"url": "", "headers_sent": {}, "total_items": 0, "status": None}
     
     try:
         r = requests.get(url, params=params, headers=headers, timeout=15)
-        if r.status_code in [200, 206]:
-            return r.json()
-    except:
-        return []
-    return []
-
-# --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Full Search", layout="wide")
-
-st.markdown("""
-    <style>
-        .product-card {
-            border-bottom: 1px solid #eee; padding: 15px;
-            display: flex; align-items: center; background: white;
-        }
-        .index-box { font-family: monospace; color: #888; margin-right: 15px; font-size: 1.1rem; }
-        .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
-        .details { font-size: 0.8rem; color: #666; font-family: monospace; }
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("🛒 Atacadão - Todos os Itens")
-
-termo_busca = st.text_input("Pesquisar:", value="Arroz Camil")
-
-if termo_busca:
-    json_data = buscar_atacadao(termo_busca)
-    
-    if not json_data:
-        st.error("Nenhum dado retornado pela API.")
-    else:
-        st.success(f"Encontrados {len(json_data)} produtos.")
+        debug_info["url"] = r.url
+        debug_info["status"] = r.status_code
+        debug_info["headers_sent"] = headers
         
-        # O LOOP AGORA É SOBRE O JSON BRUTO PARA RETORNAR TUDO
-        for idx, p in enumerate(json_data):
-            try:
-                # Dados solicitados
-                p_id = p.get('productId')
-                p_name = p.get('productName')
-                brand = p.get('brand')
-                link = p.get('link', '#')
-                ref = p.get('productReference')
+        if r.status_code in [200, 206]:
+            data = r.json()
+            debug_info["total_items"] = len(data)
+            
+            lista_final = []
+            for produto in data:
+                p_id = produto.get('productId')
+                p_name = produto.get('productName')
+                brand = produto.get('brand', '')
                 
-                # Dados para exibição visual
-                item_obj = p['items'][0]
-                img = item_obj.get('images', [{}])[0].get('imageUrl', '')
-                preco = item_obj.get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 0)
-                
-                _, label_un = calcular_preco_unidade(p_name, preco)
+                for item in produto.get('items', []):
+                    sku_name = item.get('nameComplete') or p_name
+                    imagem = item.get('images', [{}])[0].get('imageUrl', '')
+                    
+                    for seller in item.get('sellers', []):
+                        oferta = seller.get('commertialOffer', {})
+                        # No Atacadão, AvailableQuantity define se tem na loja de POA
+                        estoque = oferta.get('AvailableQuantity', 0)
+                        preco = oferta.get('Price', 0)
+                        
+                        if preco > 0:
+                            lista_final.append({
+                                "productId": p_id,
+                                "productName": sku_name,
+                                "brand": brand,
+                                "price": preco,
+                                "stock": estoque,
+                                "image": imagem,
+                                "link": produto.get('link', '#')
+                            })
+                            break
+            return lista_final, debug_info
+    except Exception as e:
+        debug_info["error"] = str(e)
+    
+    return [], debug_info
 
-                # Renderização do Item
-                st.markdown(f"""
-                    <div class="product-card">
-                        <div class="index-box">{idx}:{{</div>
-                        <img src="{img}" width="60" style="margin-right:20px">
-                        <div style="flex: 1;">
-                            <div style="font-weight: bold;">{p_name}</div>
-                            <div class="details">
-                                "productId": "{p_id}"<br>
-                                "brand": "{brand}"<br>
-                                "productReference": "{ref}"
-                            </div>
-                            <div class="price">R$ {preco:,.2f} {f'<span style="font-size:0.8rem; color:gray;">({label_un})</span>' if label_un else ''}</div>
-                        </div>
-                        <div class="index-box">}}</div>
-                        <a href="{link}" target="_blank">
-                            <button style="cursor:pointer; background:#d32f2f; color:white; border:none; padding:5px 10px; border-radius:4px;">Ver</button>
-                        </a>
-                    </div>
-                """, unsafe_allow_html=True)
-            except Exception as e:
-                # Se um item falhar, mostra o erro mas continua o loop
-                st.write(f"Erro no item {idx}: {e}")
-                continue
+# --- INTERFACE STREAMLIT ---
+st.set_page_config(page_title="Atacadão POA - Regional", layout="wide")
+
+st.title("🛒 Atacadão - Filtro por Loja (POA)")
+
+with st.sidebar:
+    st.header("🛠️ Parâmetros de Localização")
+    sc_input = st.text_input("Sales Channel (sc):", value=DEFAULT_SC_POA)
+    st.info("Dica: No site do Atacadão, inspecione o 'Network' e procure por 'vtex_segment' nos cookies para POA.")
+    cookie_input = st.text_area("Cookie de Sessão (Opcional):", placeholder="Cole aqui o cookie vtex_segment ou VTEXSC...")
+    show_debug = st.checkbox("Exibir Debugger de Loja", value=True)
+
+termo = st.text_input("Produto:", value="Arroz Camil")
+
+if termo:
+    produtos, debug = buscar_atacadao(termo, sc_input, cookie_input)
+    
+    if show_debug:
+        with st.expander("🔍 DEBUGGER: Parâmetros de Estoque/Loja"):
+            st.write(f"**Endpoint Chamado:** `{debug['url']}`")
+            st.write(f"**Status da Resposta:** `{debug['status']}`")
+            st.write(f"**Total de Produtos na API:** {debug['total_items']}")
+            if debug.get('headers_sent'):
+                st.write("**Headers enviados:**")
+                st.json(debug['headers_sent'])
+
+    if not produtos:
+        st.warning("Nenhum item encontrado para esta configuração de loja.")
+    else:
+        st.success(f"Mostrando {len(produtos)} itens disponíveis na unidade selecionada.")
+        
+        for idx, p in enumerate(produtos):
+            col_img, col_txt, col_btn = st.columns([1, 4, 1])
+            with col_img:
+                st.image(p['image'], width=80)
+            with col_txt:
+                st.markdown(f"**{p['productName']}**")
+                st.markdown(f"<span style='color:red; font-size:1.2rem; font-weight:bold;'>R$ {p['price']:,.2f}</span>", unsafe_allow_html=True)
+                st.caption(f"Marca: {p['brand']} | ID: {p['productId']} | **Estoque: {p['stock']} un**")
+            with col_btn:
+                st.write("")
+                st.link_button("Abrir", p['link'])
+            st.divider()
