@@ -13,7 +13,6 @@ def remover_acentos(texto):
 
 def calcular_preco_unidade(descricao, preco_total):
     desc_minus = remover_acentos(descricao)
-    # Regex expandida para capturar quilos, gramas e litros
     m_kg = re.search(r'(\d+(?:[\.,]\d+)?)\s*(kg|quilo|g|gramas?|l|litros?|ml)', desc_minus)
     if m_kg:
         try:
@@ -35,7 +34,7 @@ def buscar_atacadao(termo, qtd_itens=50):
         "ft": termo,
         "_from": 0,
         "_to": qtd_itens - 1,
-        "sc": 1  # Sales Channel padrão
+        "sc": 1 
     }
     
     headers = {
@@ -55,26 +54,30 @@ def buscar_atacadao(termo, qtd_itens=50):
             debug_info["json_raw"] = data
             debug_info["recebidos"] = len(data)
             
-            produtos_validos = []
+            produtos_finais = []
             for p in data:
-                encontrou_oferta = False
-                # Varre todos os SKUs do produto para achar um com preço
+                # Importante: Iterar por todos os items (SKUs) para pegar variações de peso/tamanho
                 for item in p.get('items', []):
+                    nome_completo = item.get('nameComplete') or p.get('productName')
+                    imagem = item.get('images', [{}])[0].get('imageUrl', '')
+                    
                     for seller in item.get('sellers', []):
                         oferta = seller.get('commertialOffer', {})
                         preco = oferta.get('Price', 0)
                         
                         if preco > 0:
-                            # Injeta os dados da oferta válida no objeto principal do produto
-                            p['preco_valido'] = preco
-                            p['imagem_valida'] = item.get('images', [{}])[0].get('imageUrl', '')
-                            produtos_validos.append(p)
-                            encontrou_oferta = True
-                            break
-                    if encontrou_oferta: break
+                            # Criamos um objeto novo para cada oferta/SKU para não sobrescrever
+                            produtos_finais.append({
+                                "nome": nome_completo,
+                                "preco": preco,
+                                "imagem": imagem,
+                                "link": p.get('link', '#')
+                            })
+                            # Se você quer apenas uma oferta por SKU, damos break aqui
+                            break 
             
-            debug_info["filtrados"] = len(produtos_validos)
-            return produtos_validos, debug_info
+            debug_info["filtrados"] = len(produtos_finais)
+            return produtos_finais, debug_info
         else:
             debug_info["error"] = f"Erro HTTP: {r.status_code}"
     except Exception as e:
@@ -83,71 +86,56 @@ def buscar_atacadao(termo, qtd_itens=50):
     return [], debug_info
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão - Preços Corrigidos", layout="wide")
+st.set_page_config(page_title="Atacadão - Busca Total", layout="wide")
 
 st.markdown("""
     <style>
         .product-card {
             border: 1px solid #eee; padding: 12px; border-radius: 12px; 
-            margin-bottom: 10px; display: flex; align-items: center; 
-            background: white; transition: 0.3s;
+            margin-bottom: 10px; display: flex; align-items: center; background: white;
         }
-        .product-card:hover { border-color: #d32f2f; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
         .unit-price { color: #666; font-size: 0.8rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 10px; }
         .product-name { font-size: 0.95rem; color: #333; margin-bottom: 4px; font-weight: 500; }
-        .btn-ver { background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 0.8rem; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 Atacadão")
 
-# Inicialização de busca padrão
-if "termo" not in st.session_state:
-    st.session_state.termo = "Arroz Camil"
-
-col_busca, col_debug = st.columns([3, 1])
-with col_busca:
-    termo_busca = st.text_input("Buscar produto:", value=st.session_state.termo)
-with col_debug:
-    enable_debug = st.checkbox("Modo Debugger", value=True)
+termo_busca = st.text_input("Buscar produto:", value="Arroz Camil")
+enable_debug = st.checkbox("Modo Debugger", value=False)
 
 if termo_busca:
-    with st.spinner(f"Buscando {termo_busca}..."):
+    with st.spinner("Buscando..."):
         produtos, info = buscar_atacadao(termo_busca)
     
     if enable_debug:
-        with st.expander("🛠️ Painel de Controle de API"):
-            st.code(f"URL: {info['url']}")
-            st.write(f"**Recebidos no JSON:** {info['recebidos']} | **Válidos com Preço:** {info['filtrados']}")
-            if info['error']: st.error(info['error'])
+        with st.expander("🛠️ Debugger"):
+            st.write(f"Itens processados: {len(produtos)}")
             st.json(info['json_raw'])
 
     if not produtos:
-        st.warning("Nenhum item com preço encontrado para este termo.")
+        st.warning("Nenhum item encontrado.")
     else:
-        st.success(f"Encontrados {len(produtos)} itens.")
         for p in produtos:
-            nome = p.get('productName', '')
-            link = p.get('link', '#')
-            img = p.get('imagem_valida', '')
-            preco = p.get('preco_valido', 0)
+            nome = p['nome']
+            preco = p['preco']
+            img = p['imagem']
+            link = p['link']
             
             _, calc_label = calcular_preco_unidade(nome, preco)
             
             st.markdown(f"""
                 <div class="product-card">
-                    <div style="min-width: 70px; text-align: center;">
-                        <img src="{img}" width="60">
-                    </div>
-                    <div style="flex: 1; margin-left: 15px;">
+                    <img src="{img}" width="65" style="margin-right:15px">
+                    <div style="flex: 1;">
                         <div class="product-name">{nome}</div>
                         <span class="price">R$ {preco:,.2f}</span>
                         {f'<span class="unit-price">{calc_label}</span>' if calc_label else ''}
                     </div>
-                    <div style="text-align: right;">
-                        <a href="{link}" target="_blank" class="btn-ver">Ver no Site</a>
-                    </div>
+                    <a href="{link}" target="_blank" style="text-decoration:none">
+                        <button style="background:#d32f2f; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer">Ver</button>
+                    </a>
                 </div>
             """, unsafe_allow_html=True)
 
