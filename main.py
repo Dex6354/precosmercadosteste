@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import unicodedata
 import re
+import json
 
 # --- CONFIGURAÇÕES ---
 LOGO_ATACADAO_URL = "https://upload.wikimedia.org/wikipedia/pt/d/d3/Atacad%C3%A3o_logo.png"
@@ -26,24 +27,67 @@ def calcular_preco_unidade(descricao, preco_total):
         except: pass
     return None, None
 
-def buscar_atacadao(termo, qtd_itens=50):
-    url = "https://www.atacadao.com.br/api/catalog_system/pub/products/search"
-    params = {
-        "ft": termo,
-        "_from": 0,
-        "_to": qtd_itens - 1,
-        "sc": 1 
+def buscar_atacadao_graphql(termo, qtd_itens=20):
+    url = "https://www.atacadao.com.br/api/graphql"
+    
+    # Payload baseado nos parâmetros fornecidos
+    variables = {
+        "first": qtd_itens,
+        "after": "0",
+        "sort": "score_desc",
+        "term": termo,
+        "selectedFacets": [
+            {"key": "region-id", "value": "U1cjYXRhY2FkYW9icjY1Ng=="},
+            {"key": "channel", "value": "{\"salesChannel\":\"1\",\"seller\":\"atacadaobr656\",\"regionId\":\"U1cjYXRhY2FkYW9icjY1Ng==\"}"},
+            {"key": "locale", "value": "pt-BR"}
+        ]
     }
+    
+    # Query simplificada para buscar os dados básicos necessários para a interface
+    query = """
+    query ProductsQuery($first: Int!, $after: String!, $sort: String!, $term: String!, $selectedFacets: [SelectedFacetInput!]) {
+      search(first: $first, after: $after, sort: $sort, term: $term, selectedFacets: $selectedFacets) {
+        products {
+          nodes {
+            id
+            name
+            brand
+            link
+            reference
+            items {
+              images {
+                url
+              }
+              sellers {
+                commertialOffer {
+                  Price
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    
+    payload = {
+        "operationName": "ProductsQuery",
+        "variables": variables,
+        "query": query
+    }
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
+        "Content-Type": "application/json"
     }
     
     try:
-        r = requests.get(url, params=params, headers=headers, timeout=15)
-        if r.status_code in [200, 206]:
-            return r.json()
-    except:
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            return data.get('data', {}).get('search', {}).get('products', {}).get('nodes', [])
+    except Exception as e:
+        st.error(f"Erro na requisição: {e}")
         return []
     return []
 
@@ -62,36 +106,33 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 Atacadão - Todos os Itens")
+st.title("🛒 Atacadão - GraphQL Search")
 
 termo_busca = st.text_input("Pesquisar:", value="Arroz Camil")
 
 if termo_busca:
-    json_data = buscar_atacadao(termo_busca)
+    produtos = buscar_atacadao_graphql(termo_busca)
     
-    if not json_data:
-        st.error("Nenhum dado retornado pela API.")
+    if not produtos:
+        st.warning("Nenhum produto encontrado ou erro na API.")
     else:
-        st.success(f"Encontrados {len(json_data)} produtos.")
+        st.success(f"Encontrados {len(produtos)} produtos.")
         
-        # O LOOP AGORA É SOBRE O JSON BRUTO PARA RETORNAR TUDO
-        for idx, p in enumerate(json_data):
+        for idx, p in enumerate(produtos):
             try:
-                # Dados solicitados
-                p_id = p.get('productId')
-                p_name = p.get('productName')
+                p_id = p.get('id')
+                p_name = p.get('name')
                 brand = p.get('brand')
-                link = p.get('link', '#')
-                ref = p.get('productReference')
+                link = "https://www.atacadao.com.br" + p.get('link', '')
+                ref = p.get('reference')
                 
-                # Dados para exibição visual
+                # Acesso aos itens e preços no formato GraphQL
                 item_obj = p['items'][0]
-                img = item_obj.get('images', [{}])[0].get('imageUrl', '')
+                img = item_obj.get('images', [{}])[0].get('url', '')
                 preco = item_obj.get('sellers', [{}])[0].get('commertialOffer', {}).get('Price', 0)
                 
                 _, label_un = calcular_preco_unidade(p_name, preco)
 
-                # Renderização do Item
                 st.markdown(f"""
                     <div class="product-card">
                         <div class="index-box">{idx}:{{</div>
@@ -99,9 +140,9 @@ if termo_busca:
                         <div style="flex: 1;">
                             <div style="font-weight: bold;">{p_name}</div>
                             <div class="details">
-                                "productId": "{p_id}"<br>
+                                "id": "{p_id}"<br>
                                 "brand": "{brand}"<br>
-                                "productReference": "{ref}"
+                                "reference": "{ref}"
                             </div>
                             <div class="price">R$ {preco:,.2f} {f'<span style="font-size:0.8rem; color:gray;">({label_un})</span>' if label_un else ''}</div>
                         </div>
@@ -112,6 +153,5 @@ if termo_busca:
                     </div>
                 """, unsafe_allow_html=True)
             except Exception as e:
-                # Se um item falhar, mostra o erro mas continua o loop
-                st.write(f"Erro no item {idx}: {e}")
+                st.write(f"Erro ao processar item {idx}: {e}")
                 continue
