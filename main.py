@@ -34,7 +34,7 @@ def buscar_atacadao(termo, qtd_itens=50):
         "_from": 0,
         "_to": qtd_itens - 1,
         "sc": 1,
-        "regionId": REGION_ID_POA  # Filtro para a loja de Poá
+        "regionId": REGION_ID_POA
     }
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -50,7 +50,7 @@ def buscar_atacadao(termo, qtd_itens=50):
     return []
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão Poá Search", layout="wide")
+st.set_page_config(page_title="Atacadão Poá - Disponíveis", layout="wide")
 
 st.markdown("""
     <style>
@@ -61,10 +61,11 @@ st.markdown("""
         .index-box { font-family: monospace; color: #888; margin-right: 15px; font-size: 1.1rem; }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
         .details { font-size: 0.8rem; color: #666; font-family: monospace; }
+        .out-of-stock { color: #999; font-style: italic; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🛒 Atacadão - Unidade Poá")
+st.title("🛒 Atacadão - Apenas Disponíveis (Poá)")
 
 termo_busca = st.text_input("Pesquisar:", value="Arroz Camil")
 
@@ -72,11 +73,22 @@ if termo_busca:
     json_data = buscar_atacadao(termo_busca)
     
     if not json_data:
-        st.error("Nenhum dado retornado pela API para esta região.")
+        st.error("Nenhum dado retornado.")
     else:
-        st.success(f"Encontrados {len(json_data)} produtos em Poá.")
+        # Filtragem por disponibilidade
+        produtos_disponiveis = []
+        for p in json_data:
+            try:
+                offer = p['items'][0]['sellers'][0]['commertialOffer']
+                # Só adiciona se houver estoque e preço maior que zero
+                if offer.get('IsAvailable') and offer.get('Price', 0) > 0:
+                    produtos_disponiveis.append(p)
+            except:
+                continue
+
+        st.success(f"Encontrados {len(produtos_disponiveis)} produtos disponíveis para compra em Poá.")
         
-        for idx, p in enumerate(json_data):
+        for idx, p in enumerate(produtos_disponiveis):
             try:
                 p_id = p.get('productId')
                 p_name = p.get('productName')
@@ -110,5 +122,4 @@ if termo_busca:
                     </div>
                 """, unsafe_allow_html=True)
             except Exception as e:
-                st.write(f"Erro no item {idx}: {e}")
                 continue
