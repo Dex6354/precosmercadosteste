@@ -34,15 +34,16 @@ def calcular_valor_unitario(nome, preco):
             
     return float('inf'), ""
 
-def buscar_todos_itens_poa(termo):
+def buscar_todos_itens_poa(termo_busca):
     url = "https://www.atacadao.com.br/api/graphql?operationName=ProductsQuery"
     lista_itens = []
     after = 0
     first = 50
     
-    # Regex para encontrar a palavra exata (ignora "Elite" ao buscar "Leite")
-    # \b representa o limite da palavra
-    regex_filtro = re.compile(rf"\b{re.escape(termo)}\b", re.IGNORECASE)
+    # Criar uma lista de regex para cada palavra digitada
+    # Isso permite que "Arroz" e "Camil" sejam validados de forma independente
+    palavras = termo_busca.split()
+    filtros_regex = [re.compile(rf"\b{re.escape(p)}\b", re.IGNORECASE) for p in palavras]
 
     headers = {
         "Content-Type": "application/json",
@@ -57,7 +58,7 @@ def buscar_todos_itens_poa(termo):
                 "first": first,
                 "after": str(after),
                 "sort": "score_desc",
-                "term": termo,
+                "term": termo_busca,
                 "selectedFacets": [
                     {"key": "region-id", "value": REGION_ID_BASE64},
                     {"key": "channel", "value": json.dumps({
@@ -80,8 +81,8 @@ def buscar_todos_itens_poa(termo):
                 node = edge.get('node', {})
                 nome_produto = node.get('name', '')
                 
-                # Validação direta: só adiciona se o termo for uma palavra inteira no nome
-                if regex_filtro.search(nome_produto):
+                # Validação: O nome do produto deve conter TODAS as palavras pesquisadas
+                if all(regex.search(nome_produto) for regex in filtros_regex):
                     offers = node.get('offers', {}).get('offers', [])
                     price = offers[0].get('price', 0.0) if offers else 0.0
                     price_atacado = offers[1].get('price') if len(offers) > 1 else None
@@ -124,11 +125,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h6>🛒 Preços Mercados - Atacadão</h6>", unsafe_allow_html=True)
-termo_input = st.text_input("🔎 Digite o nome do produto:", "Leite").strip()
+termo_input = st.text_input("🔎 Digite o nome do produto:", "Arroz Camil").strip()
 
 if termo_input:
     col1, = st.columns([1])
-    with st.spinner("🔍 Filtrando resultados exatos..."):
+    with st.spinner("🔍 Analisando termos da busca..."):
         itens = buscar_todos_itens_poa(termo_input)
         itens = sorted(itens, key=lambda x: x['price_unit_val'])
 
