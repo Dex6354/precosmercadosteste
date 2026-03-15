@@ -4,69 +4,50 @@ import requests
 import unicodedata
 import re
 
-# --- CONFIGURAÇÕES ---
-API_BASE = "https://api-xsupermercados.applay.tech/api2/ecommerce"
-SHOP_SLUG = "xsupermercados"
+# --- CONFIGURAÇÕES NEXT.JS ---
+URL_BUSCA = "https://www.xsupermercados.com.br/buscar?texto="
+ACTION_ID = "b5240a22b66e2990db00381bcd0e987be41e7f34"
 
-# Payload de sessão idêntico ao que funcionou no seu log
-SESSION_DATA = {
-    "session": {
-        "loja": {"id": "64b96dd4276891783b1fa25d", "numero": 6},
-        "device": {
-            "browser": "chrome", 
-            "platform": "web", 
-            "uuid": "dfdf4d49-0ab9-4aab-ba11-dcbb47ac542d"
-        },
-        "modality": "Retirada"
-    }
+HEADERS_NEXT = {
+    "Accept": "text/x-component",
+    "Accept-Language": "pt-BR,pt;q=0.5",
+    "Content-Type": "text/plain;charset=UTF-8",
+    "Next-Action": ACTION_ID,
+    "Next-Router-State-Tree": '["",{"children":["pages",{"children":["search",{"children":["__PAGE__?{\\"texto\\":\\"banana\\"}",{}]}]}]},null,null,true]',
+    "Origin": "https://www.xsupermercados.com.br",
+    "Referer": "https://www.xsupermercados.com.br/buscar?texto=banana",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 }
 
-# --- FUNÇÕES DE EXTRAÇÃO ---
-
+# --- FUNÇÃO DE BUSCA ---
 def buscar_x_supermercados(termo):
-    """Realiza a autenticação e busca em uma única sessão de rede."""
-    s = requests.Session()
-    s.headers.update({
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/plain, */*",
-        "X-Shop-Slug": SHOP_SLUG,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Origin": "https://www.xsupermercados.com.br",
-        "Referer": "https://www.xsupermercados.com.br/"
-    })
-
+    # O Next.js espera os argumentos da função no corpo como texto puro ou JSON array
+    # Baseado no content-length 43, ele envia o termo dentro de um array formatado
+    payload = f'["{termo}"]' 
+    
     try:
-        # 1. Passo de Autenticação (Session)
-        res_auth = s.post(f"{API_BASE}/eauth/session", json=SESSION_DATA, timeout=10)
-        if res_auth.status_code != 200:
-            return [], f"Erro na Autenticação: {res_auth.status_code}"
+        response = requests.post(
+            f"{URL_BUSCA}{termo}", 
+            headers=HEADERS_NEXT, 
+            data=payload, 
+            timeout=15
+        )
         
-        token = res_auth.json().get('token')
-        if not token:
-            return [], "Token não recebido."
-
-        # 2. Atualizar headers com o token recebido
-        s.headers.update({
-            "Authorization": f"Bearer {token}",
-            "X-Session-Token": token
-        })
-
-        # 3. Passo de Busca (conforme estrutura do log)
-        payload_busca = SESSION_DATA.copy()
-        payload_busca.update({
-            "filter": {"text": termo},
-            "loja_id": 6,
-            "pagina": 1,
-            "ordenacao": "relevancia"
-        })
-
-        res_busca = s.post(f"{API_BASE}/enav/produtos_buscar", json=payload_busca, timeout=15)
-        
-        if res_busca.status_code == 200:
-            return res_busca.json().get('produtos', []), None
-        else:
-            return [], f"Erro na Busca: {res_busca.status_code} - {res_busca.text[:100]}"
-
+        if response.status_code == 200:
+            # O Next.js retorna um formato stream (0:["$@1",null]...)
+            # Precisamos extrair o JSON da segunda linha
+            linhas = response.text.split('\n')
+            for linha in linhas:
+                if '{"success":true' in linha:
+                    # Remove o prefixo do stream (ex: "1:")
+                    json_str = linha[linha.find('{'):]
+                    data = requests.utils.json.loads(json_str)
+                    return data.get('data', {}).get('produtos', []), None
+            
+            # Se não achou produtos no stream, tenta extrair o que houver
+            return [], "Formato de resposta inesperado do Next.js"
+            
+        return [], f"Erro {response.status_code}"
     except Exception as e:
         return [], str(e)
 
@@ -79,29 +60,27 @@ def slugify(text):
     text = re.sub(r'[^a-z0-9\s-]', '', text).strip()
     return re.sub(r'[-\s]+', '-', text)
 
-# --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="X Supermercados - Poá", layout="wide")
+# --- INTERFACE ---
+st.set_page_config(page_title="X Supermercados", layout="wide")
 
 st.markdown("""
     <style>
         .product-card { display: flex; align-items: center; gap: 15px; padding: 10px; border-bottom: 1px solid #eee; }
-        .price { color: #2e7d32; font-weight: bold; font-size: 1.1em; }
+        .price { color: #2e7d32; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🛒 X Supermercados")
-termo_input = st.text_input("Pesquisar produto:", "Banana").strip()
+termo_input = st.text_input("Buscar produto:", "Banana").strip()
 
 if termo_input:
     palavras_chave = remover_acentos(termo_input).split()
     
-    with st.spinner("Sincronizando sessão segura..."):
+    with st.spinner("Chamando Server Action..."):
         produtos_raw, erro = buscar_x_supermercados(termo_input)
         
         if erro:
-            st.error(f"Falha técnica: {erro}")
-            with st.expander("Ver detalhes do erro"):
-                st.write("Verifique se o site oficial está acessível e se os headers de Origin/Referer permanecem os mesmos.")
+            st.error(f"Erro: {erro}")
         else:
             x_final = [p for p in produtos_raw if all(k in remover_acentos(p.get('nome','')) for k in palavras_chave)]
             
