@@ -54,26 +54,31 @@ def buscar_atacadao(termo, qtd_itens=50):
             debug_info["json_raw"] = data
             
             lista_final = []
+            # PERCORRE CADA PRODUTO (Nível 0: Arroz Camil)
             for produto in data:
-                # Cada produto pode ter vários sub-itens (SKUs)
+                # PERCORRE CADA SKU/ITEM (Nível 1: 5kg, 1kg, Biscoito 90g)
                 for item in produto.get('items', []):
+                    # Pega o nome mais específico possível
                     nome_exibicao = item.get('nameComplete') or produto.get('productName')
                     imagem = item.get('images', [{}])[0].get('imageUrl', '')
                     link = produto.get('link', '#')
                     
+                    # PERCORRE OS VENDEDORES/OFERTAS
                     for seller in item.get('sellers', []):
                         oferta = seller.get('commertialOffer', {})
                         preco = oferta.get('Price', 0)
                         
                         if preco > 0:
-                            # Criamos um objeto único para cada variação encontrada
+                            # Adiciona como um item único na lista final
                             lista_final.append({
+                                "id": item.get('itemId'),
                                 "nome": nome_exibicao,
                                 "preco": preco,
                                 "imagem": imagem,
-                                "link": link
+                                "link": link,
+                                "marca": produto.get('brand', '')
                             })
-                            break # Encontrou o preço para este SKU, pula para o próximo SKU
+                            break # Encontrou preço para este SKU, vai para o próximo SKU
             
             return lista_final, debug_info
         else:
@@ -84,7 +89,7 @@ def buscar_atacadao(termo, qtd_itens=50):
     return [], debug_info
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão - Resultados Reais", layout="wide")
+st.set_page_config(page_title="Atacadão - Catálogo Completo", layout="wide")
 
 st.markdown("""
     <style>
@@ -95,6 +100,7 @@ st.markdown("""
         .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
         .unit-price { color: #666; font-size: 0.8rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 10px; }
         .product-name { font-size: 0.95rem; color: #333; margin-bottom: 4px; font-weight: 600; }
+        .brand-label { font-size: 0.75rem; color: #888; text-transform: uppercase; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -104,30 +110,33 @@ termo_busca = st.text_input("Buscar produto:", value="Arroz Camil")
 enable_debug = st.checkbox("Modo Debugger", value=False)
 
 if termo_busca:
-    with st.spinner("Buscando todos os itens..."):
+    with st.spinner("Extraindo todas as variações..."):
         produtos, info = buscar_atacadao(termo_busca)
     
     if enable_debug:
         with st.expander("🛠️ Debugger"):
-            st.write(f"Total de ofertas extraídas: {len(produtos)}")
+            st.write(f"Total de SKUs únicos encontrados: {len(produtos)}")
             st.json(info['json_raw'])
 
     if not produtos:
         st.warning("Nenhum item encontrado.")
     else:
-        st.success(f"Exibindo {len(produtos)} resultados encontrados.")
-        for p in produtos:
+        st.success(f"Encontrados {len(produtos)} itens.")
+        for idx, p in enumerate(produtos):
             nome = p['nome']
             preco = p['preco']
             img = p['imagem']
             link = p['link']
+            marca = p['marca']
             
             _, calc_label = calcular_preco_unidade(nome, preco)
             
             st.markdown(f"""
                 <div class="product-card">
-                    <img src="{img}" width="70" style="margin-right:15px">
+                    <div style="font-size: 0.8rem; color: #ccc; margin-right: 10px;">{idx}</div>
+                    <img src="{img}" width="65" style="margin-right:15px">
                     <div style="flex: 1;">
+                        <div class="brand-label">{marca}</div>
                         <div class="product-name">{nome}</div>
                         <span class="price">R$ {preco:,.2f}</span>
                         {f'<span class="unit-price">{calc_label}</span>' if calc_label else ''}
