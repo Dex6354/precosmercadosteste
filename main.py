@@ -1,96 +1,60 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import requests
-import json
+import unicodedata
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURAÇÕES E CONSTANTES ---
-REGION_ID_BASE64 = "U1cjYXRhY2FkYW9icjY1Ng=="
-SELLER_ID = "atacadaobr656"
+ORG_ID = "131"  # ID específico do X Supermercados
+TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJ2aXBjb21tZXJjZSIsImF1ZCI6ImFwaS1hZG1pbiIsInN1YiI6IjZiYzQ4NjdlLWRjYTktMTFlOS04NzQyLTAyMGQ3OTM1OWNhMCIsInZpcGNvbW1lcmNlQ2xpZW50ZUlkIjpudWxsLCJpYXQiOjE3NTE5MjQ5MjgsInZlciI6MSwiY2xpZW50IjpudWxsLCJvcGVyYXRvciI6bnVsbCwib3JnIjoiMTMxIn0.y6W8Q-Hn7A9V8_R4X2Q_Z1z7G8" # Token atualizado para Org 131
 
-LOGO_ATACADAO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-atacadao.png"
+HEADERS_X = {
+    "Authorization": f"Bearer {TOKEN}",
+    "organizationid": ORG_ID,
+    "domainkey": "www.xsupermercados.com.br",
+    "User-Agent": "Mozilla/5.0"
+}
+
+LOGO_X_URL = "https://www.xsupermercados.com.br/assets/images/logo.png"
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 
-# --- LÓGICA DE EXTRAÇÃO (ATACADÃO) ---
-def buscar_todos_itens_poa(termo):
-    url = "https://www.atacadao.com.br/api/graphql?operationName=ProductsQuery"
-    lista_itens = []
-    after = 0
-    first = 50  # Buscando 50 por vez para ser mais rápido
-    
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "*/*"
-    }
+# --- FUNÇÕES UTILITÁRIAS ---
+def remover_acentos(texto):
+    if not texto: return ""
+    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').lower()
 
-    while True:
-        payload = {
-            "operationName": "ProductsQuery",
-            "variables": {
-                "first": first,
-                "after": str(after),
-                "sort": "score_desc",
-                "term": termo,
-                "selectedFacets": [
-                    {"key": "region-id", "value": REGION_ID_BASE64},
-                    {"key": "channel", "value": json.dumps({
-                        "salesChannel": "1",
-                        "seller": SELLER_ID,
-                        "regionId": REGION_ID_BASE64
-                    })},
-                    {"key": "locale", "value": "pt-BR"}
-                ]
-            }
-        }
-        
-        try:
-            response = requests.post(url, json=payload, headers=headers, timeout=15)
-            if response.status_code != 200:
-                break
+def gerar_formas_variantes(termo):
+    variantes = {termo}
+    if termo.endswith("s"): variantes.add(termo[:-1])
+    else: variantes.add(termo + "s")
+    return list(variantes)
 
-            data = response.json()
-            products = data.get('data', {}).get('search', {}).get('products', {}).get('edges', [])
-            
-            if not products:
-                break  # Para se não houver mais produtos
-            
-            for edge in products:
-                node = edge.get('node', {})
-                offers = node.get('offers', {}).get('offers', [])
-                
-                price = 0.0
-                price_atacado = None
-                
-                if offers:
-                    # Tenta pegar preço de varejo e atacado
-                    price = offers[0].get('price', 0.0)
-                    if len(offers) > 1:
-                        price_atacado = offers[1].get('price')
+def slugify(text):
+    text = remover_acentos(text)
+    text = re.sub(r'[^a-z0-9\s-]', '', text).strip()
+    text = re.sub(r'[-\s]+', '-', text)
+    return text
 
-                lista_itens.append({
-                    "productName": node.get('name', 'N/A'),
-                    "brand": node.get('brand', {}).get('name', 'N/A'),
-                    "price": price,
-                    "price_atacado": price_atacado,
-                    "link": f"https://www.atacadao.com.br{node.get('slug')}/p",
-                    "img": node.get('image', [{}])[0].get('url', '')
-                })
+def formatar_preco_x(preco_total, qtd, unidade):
+    if not unidade: return f"R$ {preco_total:.2f}".replace('.', ',')
+    u = unidade.lower()
+    if qtd and qtd != 1:
+        return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{str(qtd).replace('.', ',')}{u}"
+    return f"R$ {preco_total:.2f}".replace('.', ',') + f"/{u}"
 
-            total_count = data.get('data', {}).get('search', {}).get('products', {}).get('pageInfo', {}).get('totalCount', 0)
-            
-            after += first
-            if after >= total_count:
-                break
-                
-        except Exception as e:
-            st.error(f"Erro ao processar API: {e}")
-            break
-            
-    return lista_itens
+# --- REQUISIÇÕES ---
+def buscar_pagina_x(termo, pagina):
+    url = f"https://services.vipcommerce.com.br/api-admin/v1/org/{ORG_ID}/filial/1/centro_distribuicao/1/loja/buscas/produtos/termo/{termo}?page={pagina}"
+    try:
+        r = requests.get(url, headers=HEADERS_X, timeout=10)
+        if r.status_code == 200: return r.json().get('data', {}).get('produtos', [])
+    except: pass
+    return []
 
 # --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="Preços X Supermercados", page_icon="🛒", layout="wide")
 
 st.markdown("""
     <style>
@@ -103,86 +67,79 @@ st.markdown("""
         .product-image { min-width: 80px; max-width: 80px; flex-shrink: 0; }
         .product-info { flex: 1 1 auto; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
         hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
-        .info-cinza { color: gray; font-size: 0.8rem; }
         [data-testid="stColumn"] {
             overflow-y: auto; max-height: 90vh; padding: 10px; border: 1px solid #f0f2f6; border-radius: 8px;
             max-width: 480px; margin-left: auto; margin-right: auto; background: transparent;
-            scrollbar-width: thin; scrollbar-color: gray transparent;
         }
-        [data-testid="stColumn"]::-webkit-scrollbar { width: 6px; background: transparent; }
-        [data-testid="stColumn"]::-webkit-scrollbar-track { background: transparent; }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb { background-color: gray; border-radius: 3px; border: 1px solid transparent; }
-        [data-testid="stColumn"]::-webkit-scrollbar-thumb:hover { background-color: white; }
-        .block-container { padding-right: 47px !important; padding-bottom: 15px !important; margin-bottom: 15px !important; }
-        input[type="text"] { font-size: 0.8rem !important; }
-        [data-testid="stColumn"] { margin-bottom: 20px; }
         header[data-testid="stHeader"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h6>🛒 Preços Mercados - Atacadão</h6>", unsafe_allow_html=True)
+st.markdown("<h6>🛒 Preços Mercados - X Supermercados</h6>", unsafe_allow_html=True)
 termo = st.text_input("🔎 Digite o nome do produto:", "Banana").strip()
 
 if termo:
-    # Cria uma coluna centralizada seguindo a mesma estrutura do estilofinal
     col1, = st.columns([1])
+    termos_busca = gerar_formas_variantes(remover_acentos(termo))
+    palavras_chave = remover_acentos(termo).split()
 
-    with st.spinner("🔍 Buscando no mercado..."):
-        itens_atacadao = buscar_todos_itens_poa(termo)
+    with st.spinner("🔍 Buscando no X Supermercados..."):
+        raw_x = []
+        with ThreadPoolExecutor(max_workers=8) as exe:
+            fs = [exe.submit(buscar_pagina_x, t, p) for t in termos_busca for p in range(1, 4)]
+            for f in as_completed(fs): raw_x.extend(f.result())
         
-        # Ordenando por preço do varejo
-        itens_atacadao = sorted(itens_atacadao, key=lambda x: x['price'])
+        vistos_x = set()
+        x_final = []
+        for p in raw_x:
+            pid = p.get('id')
+            if pid and pid not in vistos_x and p.get("disponivel", True):
+                vistos_x.add(pid)
+                desc = p.get('descricao', '')
+                if all(k in remover_acentos(desc) for k in palavras_chave):
+                    oferta = p.get('oferta') or {}
+                    preco_oferta = oferta.get('preco_oferta')
+                    preco_base = p.get('preco') or 0
+                    preco_final = float(preco_oferta) if (p.get('em_oferta') and preco_oferta) else float(preco_base)
+                    
+                    p['url_final'] = f"https://www.xsupermercados.com.br/produto/{p.get('produto_id')}/{slugify(desc)}"
+                    p['preco_str'] = formatar_preco_x(preco_final, p.get('quantidade_unidade_diferente'), p.get('unidade_sigla'))
+                    p['preco_final'] = preco_final
+                    x_final.append(p)
+        
+        x_final = sorted(x_final, key=lambda x: x['preco_final'])
 
     with col1:
         st.markdown(f"""
             <h5 style="display: flex; align-items: center; justify-content: center;">
-            <img src="{LOGO_ATACADAO_URL}" width="80" alt="Atacadão" style="margin-right:8px; background-color: white; border-radius: 4px; padding: 3px;"/>
+            <img src="{LOGO_X_URL}" width="120" alt="X Supermercados" style="background-color: white; border-radius: 4px; padding: 5px;"/>
             </h5>
         """, unsafe_allow_html=True)
-        st.markdown(f"<small>🔎 {len(itens_atacadao)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+        st.markdown(f"<small>🔎 {len(x_final)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
         
-        if not itens_atacadao:
-            st.warning("Nenhum produto encontrado.")
+        for p in x_final:
+            img = f"https://produto-assets-vipcommerce-com-br.br-se1.magaluobjects.com/500x500/{p.get('imagem')}" if p.get('imagem') else DEFAULT_IMAGE_URL
             
-        for p in itens_atacadao:
-            img = p['img'] if p.get('img') else DEFAULT_IMAGE_URL
-            
-            nome = p['productName']
-            preco_normal = p['price']
-            preco_atacado = p['price_atacado']
-            marca = p['brand']
-            
-            # Formatação de preços
-            if preco_atacado and preco_atacado < preco_normal:
-                preco_html = f"<div><b>R$ {preco_normal:.2f}</b> <span style='color:gray;'>(Varejo)</span></div><div><b style='color: green;'>R$ {preco_atacado:.2f}</b> <span style='color:gray;'>(Atacado)</span></div>".replace('.', ',')
+            oferta = p.get('oferta') or {}
+            if p.get('em_oferta') and oferta.get('preco_antigo'):
+                preco_antigo = float(oferta.get('preco_antigo'))
+                desconto = round(100 * (preco_antigo - p['preco_final']) / preco_antigo) if preco_antigo else 0
+                preco_html = f"<div><b>{p['preco_str']}</b> <span style='color:red; font-weight:bold;'>({desconto}% OFF)</span></div>"
+                preco_html += f"<div><span style='color:gray; text-decoration:line-through;'>R$ {preco_antigo:.2f}</span></div>"
             else:
-                preco_html = f"<div><b>R$ {preco_normal:.2f}</b></div>".replace('.', ',')
+                preco_html = f"<div><b>{p['preco_str']}</b></div>"
 
-            # Renderização do card HTML exatamente como no estilofinal
             st.markdown(f"""
                 <div class='product-container'>
-                    <a href='{p['link']}' target='_blank' class='product-image' style='text-decoration:none;'>
-                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; border-bottom-left-radius: 0; border-bottom-right-radius: 0; display: block;'/>
-                        <img src='{LOGO_ATACADAO_URL}' width='80' 
-                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid black; border-top-left-radius: 0; border-top-right-radius: 0; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
+                    <a href='{p['url_final']}' target='_blank' class='product-image' style='text-decoration:none;'>
+                        <img src='{img}' width='80' style='background-color: white; border-radius: 6px; display: block;'/>
                     </a>
                     <div class='product-info'>
-                        <div style='margin-bottom: 4px;'><a href='{p['link']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{nome}</b></a></div>
+                        <div style='margin-bottom: 4px;'><a href='{p['url_final']}' target='_blank' style='text-decoration:none; color:inherit;'><b>{p.get('descricao')}</b></a></div>
                         <div style='font-size:0.85em;'>{preco_html}</div>
-                        <div style='color:gray; font-size:0.75em; margin-top:2px;'>Marca: {marca}</div>
                     </div>
                 </div>
                 <hr class='product-separator' />
             """, unsafe_allow_html=True)
 
-    # --- FORÇAR ROLAGEM PARA O TOPO ---
-    components.html(
-        f"""
-        <script>
-            const cols = window.parent.document.querySelectorAll('[data-testid="stColumn"]');
-            cols.forEach(col => col.scrollTop = 0);
-        </script>
-        """,
-        height=0,
-        width=0
-    )
+    components.html(f"<script>window.parent.document.querySelectorAll('[data-testid=\"stColumn\"]').forEach(col => col.scrollTop = 0);</script>", height=0)
