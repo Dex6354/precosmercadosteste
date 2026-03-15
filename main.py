@@ -42,7 +42,7 @@ def buscar_atacadao(termo, qtd_itens=50):
         "Accept": "application/json"
     }
     
-    debug_info = {"url": "", "status": None, "recebidos": 0, "filtrados": 0, "json_raw": [], "error": None}
+    debug_info = {"url": "", "status": None, "json_raw": [], "error": None}
     
     try:
         r = requests.get(url, params=params, headers=headers, timeout=15)
@@ -52,32 +52,30 @@ def buscar_atacadao(termo, qtd_itens=50):
         if r.status_code in [200, 206]:
             data = r.json()
             debug_info["json_raw"] = data
-            debug_info["recebidos"] = len(data)
             
-            produtos_finais = []
-            for p in data:
-                # Importante: Iterar por todos os items (SKUs) para pegar variações de peso/tamanho
-                for item in p.get('items', []):
-                    nome_completo = item.get('nameComplete') or p.get('productName')
+            lista_final = []
+            for produto in data:
+                # Cada produto pode ter vários sub-itens (SKUs)
+                for item in produto.get('items', []):
+                    nome_exibicao = item.get('nameComplete') or produto.get('productName')
                     imagem = item.get('images', [{}])[0].get('imageUrl', '')
+                    link = produto.get('link', '#')
                     
                     for seller in item.get('sellers', []):
                         oferta = seller.get('commertialOffer', {})
                         preco = oferta.get('Price', 0)
                         
                         if preco > 0:
-                            # Criamos um objeto novo para cada oferta/SKU para não sobrescrever
-                            produtos_finais.append({
-                                "nome": nome_completo,
+                            # Criamos um objeto único para cada variação encontrada
+                            lista_final.append({
+                                "nome": nome_exibicao,
                                 "preco": preco,
                                 "imagem": imagem,
-                                "link": p.get('link', '#')
+                                "link": link
                             })
-                            # Se você quer apenas uma oferta por SKU, damos break aqui
-                            break 
+                            break # Encontrou o preço para este SKU, pula para o próximo SKU
             
-            debug_info["filtrados"] = len(produtos_finais)
-            return produtos_finais, debug_info
+            return lista_final, debug_info
         else:
             debug_info["error"] = f"Erro HTTP: {r.status_code}"
     except Exception as e:
@@ -86,7 +84,7 @@ def buscar_atacadao(termo, qtd_itens=50):
     return [], debug_info
 
 # --- INTERFACE ---
-st.set_page_config(page_title="Atacadão - Busca Total", layout="wide")
+st.set_page_config(page_title="Atacadão - Resultados Reais", layout="wide")
 
 st.markdown("""
     <style>
@@ -96,7 +94,7 @@ st.markdown("""
         }
         .price { color: #d32f2f; font-weight: bold; font-size: 1.2rem; }
         .unit-price { color: #666; font-size: 0.8rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; margin-left: 10px; }
-        .product-name { font-size: 0.95rem; color: #333; margin-bottom: 4px; font-weight: 500; }
+        .product-name { font-size: 0.95rem; color: #333; margin-bottom: 4px; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,17 +104,18 @@ termo_busca = st.text_input("Buscar produto:", value="Arroz Camil")
 enable_debug = st.checkbox("Modo Debugger", value=False)
 
 if termo_busca:
-    with st.spinner("Buscando..."):
+    with st.spinner("Buscando todos os itens..."):
         produtos, info = buscar_atacadao(termo_busca)
     
     if enable_debug:
         with st.expander("🛠️ Debugger"):
-            st.write(f"Itens processados: {len(produtos)}")
+            st.write(f"Total de ofertas extraídas: {len(produtos)}")
             st.json(info['json_raw'])
 
     if not produtos:
         st.warning("Nenhum item encontrado.")
     else:
+        st.success(f"Exibindo {len(produtos)} resultados encontrados.")
         for p in produtos:
             nome = p['nome']
             preco = p['preco']
@@ -127,7 +126,7 @@ if termo_busca:
             
             st.markdown(f"""
                 <div class="product-card">
-                    <img src="{img}" width="65" style="margin-right:15px">
+                    <img src="{img}" width="70" style="margin-right:15px">
                     <div style="flex: 1;">
                         <div class="product-name">{nome}</div>
                         <span class="price">R$ {preco:,.2f}</span>
