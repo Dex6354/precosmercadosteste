@@ -339,6 +339,107 @@ def buscar_pagina_shibata(termo, pagina):
     except: pass
     return []
 
+def renderizar_lista_produtos(produtos):
+    if not produtos:
+        st.warning("Nenhum produto encontrado para esta seleção.")
+        return
+
+    st.markdown(f"<small>🔎 {len(produtos)} produto(s) exibido(s).</small>", unsafe_allow_html=True)
+    st.markdown("<div class='lista-unica'>", unsafe_allow_html=True)
+    for item in produtos:
+        titulo = item['productName']
+        img = item['img_url']
+        link = item['link']
+        logo_mercado = item['logo_mercado']
+        
+        preco_html = ""
+        preco_info_extra = ""
+
+        if item['mercado'] == 'Shibata':
+            p = item['raw_shibata']
+            preco_formatado = item['preco_str']
+            preco_total = item['preco_final']
+
+            match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_formatado.lower())
+            if match:
+                try:
+                    q = float(match.group(1).replace(",", "."))
+                    u = match.group(2).lower()
+                    if u == "g": q /= 1000; u = "kg"
+                    elif u == "ml": q /= 1000; u = "l"
+                    if q > 0: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / q:.2f}/{u}</div>"
+                except: pass
+
+            if 'papel higienico' in remover_acentos(titulo):
+                titulo = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", titulo, flags=re.IGNORECASE)
+                titulo = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", titulo, flags=re.IGNORECASE)
+
+            total_folhas, preco_por_folha = calcular_preco_papel_toalha(titulo, preco_total)
+            if total_folhas and preco_por_folha:
+                titulo += f" <span style='color:gray;'>({total_folhas} folhas)</span>"
+                preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_por_folha:.3f}/folha</div>"
+            else:
+                _, preco_por_metro_str = calcular_precos_papel(titulo, preco_total)
+                if preco_por_metro_str:
+                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
+                elif not re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml|un|l|ml|folhas?|m)", preco_formatado.lower()):
+                    _, preco_por_unidade_str = calcular_preco_unidade(titulo, preco_total)
+                    if preco_por_unidade_str: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
+
+            if not preco_info_extra:
+                if re.search(r'1\s*d[uú]zia', titulo.lower()):
+                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / 12:.4f}/unidade (duzia)</div>"
+                else:
+                    match_contavel = re.search(r'(\d+)\s*(unidades?|ovos?)\b', titulo.lower())
+                    if match_contavel:
+                        try:
+                            qtd = int(match_contavel.group(1))
+                            if qtd > 1: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / qtd:.4f}/unidade</div>"
+                        except: pass
+
+            if item['has_promo']:
+                desconto = round(100 * (item['preco_normal'] - preco_total) / item['preco_normal']) if item['preco_normal'] else 0
+                preco_html = f"<div><b>{preco_formatado}</b> <span style='color:red;font-weight: bold;'>({desconto}% OFF)</span></div><div><span style='color:gray; text-decoration: line-through;'>R$ {item['preco_normal']:.2f}</span></div>"
+            else:
+                preco_html = f"<div><b>{preco_formatado}</b></div>"
+
+        else:  # --- NAGUMO ---
+            if contem_papel_toalha(titulo):
+                _, _, _, texto_exibicao = extrair_info_papel_toalha(titulo, "")
+                if texto_exibicao: titulo += f" <span class='info-cinza'>({texto_exibicao})</span>"
+                
+            if "papel higi" in remover_acentos(titulo.lower()):
+                titulo = re.sub(r"(folha simples)", r"<span style='color:red; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
+                titulo = re.sub(r"(folha dupla|folha tripla)", r"<span style='color:green; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
+
+            if item['has_promo']:
+                desconto_percentual = ((item['preco_normal'] - item['preco_final']) / item['preco_normal']) * 100
+                preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {item['preco_final']:,.2f}</span><span style='color: red; font-weight: bold;'> ({desconto_percentual:.0f}% OFF)</span><br><span style='text-decoration: line-through; color: gray;'>R$ {item['preco_normal']:.2f}</span>"
+            else:
+                preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {item['preco_final']:.2f}</span>"
+            
+            preco_info_extra = f"<div style='margin-top: 4px; font-size: 0.85em; color: gray;'>{item['calc_label']}</div>"
+
+        st.markdown(f"""
+            <div class='product-container'>
+                <a href='{link}' target='_blank' class='product-image' style='text-decoration:none;'>
+                    <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; display: block;'/>
+                    <img src='{logo_mercado}' width='80' 
+                        style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid #eee; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
+                </a>
+                <div class='product-info'>
+                    <div style='margin-bottom: 4px;'>
+                        <span style='background:#f0f2f6; padding:2px 6px; border-radius:4px; margin-right:5px; font-weight:bold;'>{item['mercado']}</span>
+                        <a href='{link}' target='_blank' style='text-decoration:none; color:inherit;'><b>{titulo}</b></a>
+                    </div>
+                    <div style='font-size:0.85em;'>{preco_html}</div>
+                    <div style='font-size:0.85em;'>{preco_info_extra}</div>
+                </div>
+            </div>
+            <hr class='product-separator' />
+        """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="centered")
 
@@ -443,105 +544,19 @@ if termo:
         # --- ORDENAÇÃO GERAL PELO MENOR PREÇO UNITÁRIO/MÉTRICO ---
         lista_unificada = sorted(lista_unificada, key=lambda x: x['sort_val'] if x['sort_val'] is not None else 999)
 
-    st.markdown(f"<small>🔎 {len(lista_unificada)} produto(s) encontrado(s) no total.</small>", unsafe_allow_html=True)
+    # --- CRIAÇÃO DAS ABAS DE NAVEGAÇÃO ---
+    tab_todos, tab_nagumo, tab_shibata = st.tabs(["Todos", "Só Nagumo", "Só Shibata"])
     
-    if not lista_unificada:
-        st.warning("Nenhum produto encontrado em nenhum dos mercados.")
-    else:
-        st.markdown("<div class='lista-unica'>", unsafe_allow_html=True)
-        for item in lista_unificada:
-            titulo = item['productName']
-            img = item['img_url']
-            link = item['link']
-            logo_mercado = item['logo_mercado']
-            
-            preco_html = ""
-            preco_info_extra = ""
-
-            if item['mercado'] == 'Shibata':
-                p = item['raw_shibata']
-                preco_formatado = item['preco_str']
-                preco_total = item['preco_final']
-
-                match = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", preco_formatado.lower())
-                if match:
-                    try:
-                        q = float(match.group(1).replace(",", "."))
-                        u = match.group(2).lower()
-                        if u == "g": q /= 1000; u = "kg"
-                        elif u == "ml": q /= 1000; u = "l"
-                        if q > 0: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / q:.2f}/{u}</div>"
-                    except: pass
-
-                if 'papel higienico' in remover_acentos(titulo):
-                    titulo = re.sub(r'(folha simples)', r"<span style='color:red;'><b>\1</b></span>", titulo, flags=re.IGNORECASE)
-                    titulo = re.sub(r'(folha dupla|folha tripla)', r"<span style='color:green;'><b>\1</b></span>", titulo, flags=re.IGNORECASE)
-
-                total_folhas, preco_por_folha = calcular_preco_papel_toalha(titulo, preco_total)
-                if total_folhas and preco_por_folha:
-                    titulo += f" <span style='color:gray;'>({total_folhas} folhas)</span>"
-                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_por_folha:.3f}/folha</div>"
-                else:
-                    _, preco_por_metro_str = calcular_precos_papel(titulo, preco_total)
-                    if preco_por_metro_str:
-                        preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_metro_str}</div>"
-                    elif not re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml|un|l|ml|folhas?|m)", preco_formatado.lower()):
-                        _, preco_por_unidade_str = calcular_preco_unidade(titulo, preco_total)
-                        if preco_por_unidade_str: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
-
-                if not preco_info_extra:
-                    if re.search(r'1\s*d[uú]zia', titulo.lower()):
-                        preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / 12:.4f}/unidade (duzia)</div>"
-                    else:
-                        match_contavel = re.search(r'(\d+)\s*(unidades?|ovos?)\b', titulo.lower())
-                        if match_contavel:
-                            try:
-                                qtd = int(match_contavel.group(1))
-                                if qtd > 1: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / qtd:.4f}/unidade</div>"
-                            except: pass
-
-                if item['has_promo']:
-                    desconto = round(100 * (item['preco_normal'] - preco_total) / item['preco_normal']) if item['preco_normal'] else 0
-                    preco_html = f"<div><b>{preco_formatado}</b> <span style='color:red;font-weight: bold;'>({desconto}% OFF)</span></div><div><span style='color:gray; text-decoration: line-through;'>R$ {item['preco_normal']:.2f}</span></div>"
-                else:
-                    preco_html = f"<div><b>{preco_formatado}</b></div>"
-
-            else:  # --- NAGUMO ---
-                if contem_papel_toalha(titulo):
-                    _, _, _, texto_exibicao = extrair_info_papel_toalha(titulo, "")
-                    if texto_exibicao: titulo += f" <span class='info-cinza'>({texto_exibicao})</span>"
-                    
-                if "papel higi" in remover_acentos(titulo.lower()):
-                    titulo = re.sub(r"(folha simples)", r"<span style='color:red; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
-                    titulo = re.sub(r"(folha dupla|folha tripla)", r"<span style='color:green; font-weight:bold;'>\1</span>", titulo, flags=re.IGNORECASE)
-
-                if item['has_promo']:
-                    desconto_percentual = ((item['preco_normal'] - item['preco_final']) / item['preco_normal']) * 100
-                    preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {item['preco_final']:,.2f}</span><span style='color: red; font-weight: bold;'> ({desconto_percentual:.0f}% OFF)</span><br><span style='text-decoration: line-through; color: gray;'>R$ {item['preco_normal']:.2f}</span>"
-                else:
-                    preco_html = f"<span style='font-weight: bold; font-size: 1rem;'>R$ {item['preco_final']:.2f}</span>"
-                
-                preco_info_extra = f"<div style='margin-top: 4px; font-size: 0.85em; color: gray;'>{item['calc_label']}</div>"
-
-            st.markdown(f"""
-                <div class='product-container'>
-                    <a href='{link}' target='_blank' class='product-image' style='text-decoration:none;'>
-                        <img src='{img}' width='80' style='background-color: white; border-top-left-radius: 6px; border-top-right-radius: 6px; display: block;'/>
-                        <img src='{logo_mercado}' width='80' 
-                            style='background-color: white; display: block; margin: 0 auto; border-top: 1.5px solid #eee; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; padding: 3px;'/>
-                    </a>
-                    <div class='product-info'>
-                        <div style='margin-bottom: 4px;'>
-                            <span style='background:#f0f2f6; padding:2px 6px; border-radius:4px; margin-right:5px; font-weight:bold;'>{item['mercado']}</span>
-                            <a href='{link}' target='_blank' style='text-decoration:none; color:inherit;'><b>{titulo}</b></a>
-                        </div>
-                        <div style='font-size:0.85em;'>{preco_html}</div>
-                        <div style='font-size:0.85em;'>{preco_info_extra}</div>
-                    </div>
-                </div>
-                <hr class='product-separator' />
-            """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    with tab_todos:
+        renderizar_lista_produtos(lista_unificada)
+        
+    with tab_nagumo:
+        lista_nagumo = [item for item in lista_unificada if item['mercado'] == 'Nagumo']
+        renderizar_lista_produtos(lista_nagumo)
+        
+    with tab_shibata:
+        lista_shibata = [item for item in lista_unificada if item['mercado'] == 'Shibata']
+        renderizar_lista_produtos(lista_shibata)
 
     components.html(
         f"""
