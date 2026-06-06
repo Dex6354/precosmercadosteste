@@ -50,12 +50,17 @@ def calcular_precos_papel(descricao, preco_total):
     desc_minus = descricao.lower()
     match_leve = re.search(r'leve\s*(\d+)', desc_minus)
     q_rolos = int(match_leve.group(1)) if match_leve else (
-        int(m.group(1)) if (m := re.search(r'(\d+)\s*(rolos|unidades|uni|pacotes|pacote)', desc_minus)) else None
+        int(m.group(1)) if (m := re.search(r'(\d+)\s*(rolos|unidades|uni|pacotes|pacote|un)', desc_minus)) else None
     )
     match_metros = re.search(r'(\d+(?:[\.,]\d+)?)\s*m(?:etros)?', desc_minus)
-    m_rolos = float(match_metros.group(1).replace(',', '.')) if match_metros else None
-    if q_rolos and m_rolos:
-        preco_por_metro = preco_total / (q_rolos * m_rolos)
+    m_metros = float(match_metros.group(1).replace(',', '.')) if match_metros else None
+    
+    # Se achou a metragem total ou rolos + metros individuais
+    if q_rolos and m_metros:
+        preco_por_metro = preco_total / (q_rolos * m_metros)
+        return preco_por_metro, f"R$ {preco_por_metro:.3f}".replace('.', ',') + "/m"
+    elif m_metros:
+        preco_por_metro = preco_total / m_metros
         return preco_por_metro, f"R$ {preco_por_metro:.3f}".replace('.', ',') + "/m"
     return None, None
 
@@ -135,7 +140,6 @@ def extrair_info_papel_toalha(nome, descricao):
     return None, None, None, None
 
 def extrair_descricao_remota_nagumo(url_produto):
-    """Acessa a URL interna do produto no Nagumo para capturar a especificação detalhada"""
     if not url_produto or url_produto == '#': return ""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -437,7 +441,7 @@ if termo:
                     p['preco_str'] = formatar_preco_shibata(preco_final, p.get('quantidade_unidade_diferente'), unidade_sigla)
                     p['preco_final'] = preco_final
                     
-                    # Rótulos extras estruturados
+                    # Rótulos extras estruturados e Extração de Unidade Real
                     preco_info_extra = ""
                     val_metro, preco_por_metro_str = calcular_precos_papel(desc, preco_final)
                     total_folhas, preco_por_folha = calcular_preco_papel_toalha(desc, preco_final)
@@ -479,13 +483,14 @@ if termo:
                             preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_final / 12:.2f}/unidade (dúzia)</div>"
                             val_ovo = preco_final / 12
 
-                    # DETERMINAÇÃO DO VALOR UNITÁRIO REAL DE ORDENAÇÃO BASEADO NO TEXTO DOS RÓTULOS GERADOS
+                    # --- CRITÉRIO DE ORDENAÇÃO UNIFICADO ---
+                    # Extrai o valor calculado de qualquer rótulo numérico gerado em preco_info_extra ou preco_str
                     texto_completo_precos = p['preco_str'] + " " + preco_info_extra
                     valor_ordenacao = extrair_valor_unitario(texto_completo_precos)
                     
                     if valor_ordenacao == float('inf'):
-                        if 'papel toalha' in remover_acentos(termo).lower() and preco_por_folha: valor_ordenacao = preco_por_folha
-                        elif 'papel' in remover_acentos(termo).lower() and val_metro: valor_ordenacao = val_metro
+                        if preco_por_folha: valor_ordenacao = preco_por_folha
+                        elif val_metro: valor_ordenacao = val_metro
                         elif val_ovo is not None: valor_ordenacao = val_ovo
                         else: valor_ordenacao = val_unidade or preco_final
 
@@ -494,7 +499,7 @@ if termo:
                     p['sort_val'] = valor_ordenacao
                     shibata_final_pre.append(p)
                     
-        shibata_final = sorted(shibata_final_pre, key=lambda x: x['sort_val'])
+        shibata_final = sorted(shibata_final_pre, key=lambda x: x['sort_val'] if x['sort_val'] is not None else 999)
 
         # --- PROCESSAMENTO NAGUMO TURBO ---
         nagumo_final = buscar_nagumo_turbo_total(termo)
