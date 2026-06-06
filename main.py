@@ -534,12 +534,19 @@ if termo:
                     _, preco_por_unidade_str = calcular_preco_unidade(descricao, preco_total)
                     if preco_por_unidade_str: preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>{preco_por_unidade_str}</div>"
 
-            if 'ovo' in remover_acentos(descricao).lower():
-                match_ovo = re.search(r'(\d+)\s*(unidades|un|ovos|c/|com)', descricao.lower())
-                if match_ovo and int(match_ovo.group(1)) > 0:
-                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / int(match_ovo.group(1)):.2f}/unidade</div>"
-                elif re.search(r'1\s*d[uú]zia', descricao.lower()):
-                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / 12:.2f}/unidade (dúzia)</div>"
+            # Preco por unidade contavel: ovos, forminhas, sacos, qualquer item com "X unidades" na descricao
+            # So exibe se ainda nao ha nenhum preco extra calculado (evita duplicar com kg/L/metro/folha)
+            if not preco_info_extra:
+                if re.search(r'1\s*d[uú]zia', descricao.lower()):
+                    preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / 12:.4f}/unidade (duzia)</div>"
+                else:
+                    match_contavel = re.search(r'(\d+)\s*(unidades?|ovos?)\b', descricao.lower())
+                    if match_contavel:
+                        try:
+                            qtd = int(match_contavel.group(1))
+                            if qtd > 1:
+                                preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_total / qtd:.4f}/unidade</div>"
+                        except: pass
 
             oferta = p.get('oferta') or {}
             if p.get('em_oferta') and oferta.get('preco_oferta') and oferta.get('preco_antigo'):
