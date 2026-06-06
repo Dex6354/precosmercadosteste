@@ -228,8 +228,12 @@ def calcular_preco_unitario_nagumo(preco_valor, nome, descricao, medida_venda, i
 
 def extrair_valor_unitario(label):
     if not label or label == "---": return float('inf')
-    match = re.search(r"R\$ (\d+[.,]?\d*)", label)
-    return float(match.group(1).replace(',', '.')) if match else float('inf')
+    # Captura todos os padrões numéricos de preço presentes na string estruturada
+    matches = re.findall(r"R\$\s*(\d+[.,]?\d*)", label)
+    if not matches: return float('inf')
+    # Converte e retorna estritamente o menor valor unitário encontrado
+    valores = [float(m.replace(',', '.')) for m in matches]
+    return min(valores)
 
 def inicializar_sessao_nagumo():
     url_inicializacao = f"https://www.nagumo.com.br/busca?q=Cenoura&idLoja={ID_LOJA}"
@@ -482,8 +486,7 @@ if termo:
                             preco_info_extra += f"<div style='color:gray; font-size:0.75em;'>R$ {preco_final / 12:.2f}/unidade (dúzia)</div>"
                             val_ovo = preco_final / 12
 
-                    # --- CRITÉRIO DE ORDENAÇÃO UNIFICADO ---
-                    # Extrai o menor valor numérico calculado a partir dos rótulos gerados
+                    # --- CRÍTRIO DE ORDENAÇÃO UNIFICADO POR MENOR VALOR ---
                     texto_completo_precos = p['preco_str'] + " " + preco_info_extra
                     valor_ordenacao = extrair_valor_unitario(texto_completo_precos)
                     
