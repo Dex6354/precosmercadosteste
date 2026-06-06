@@ -474,8 +474,11 @@ if termo:
                                     val_item = preco_final / qtd
                             except: pass
 
-                    # Seleciona o menor valor calculado disponivel, independente da categoria (kg, L, m, folha, unidade...)
-                    candidatos = [v for v in [val_metro, val_folha, val_unidade, val_item] if v is not None and v > 0]
+                    # Seleciona o menor valor calculado disponivel, independente da categoria (kg, L, m, folha...)
+                    # val_item entra apenas como ultimo recurso: evita misturar preco/unidade com preco/metro ou preco/folha
+                    candidatos = [v for v in [val_metro, val_folha, val_unidade] if v is not None and v > 0]
+                    if not candidatos and val_item is not None and val_item > 0:
+                        candidatos = [val_item]
                     p['sort_val'] = min(candidatos) if candidatos else preco_final
                     
                     shibata_final.append(p)
