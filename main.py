@@ -55,7 +55,6 @@ def calcular_precos_papel(descricao, preco_total):
     match_metros = re.search(r'(\d+(?:[\.,]\d+)?)\s*m(?:etros)?', desc_minus)
     m_metros = float(match_metros.group(1).replace(',', '.')) if match_metros else None
     
-    # Se achou a metragem total ou rolos + metros individuais
     if q_rolos and m_metros:
         preco_por_metro = preco_total / (q_rolos * m_metros)
         return preco_por_metro, f"R$ {preco_por_metro:.3f}".replace('.', ',') + "/m"
@@ -484,7 +483,7 @@ if termo:
                             val_ovo = preco_final / 12
 
                     # --- CRITÉRIO DE ORDENAÇÃO UNIFICADO ---
-                    # Extrai o valor calculado de qualquer rótulo numérico gerado em preco_info_extra ou preco_str
+                    # Extrai o menor valor numérico calculado a partir dos rótulos gerados
                     texto_completo_precos = p['preco_str'] + " " + preco_info_extra
                     valor_ordenacao = extrair_valor_unitario(texto_completo_precos)
                     
