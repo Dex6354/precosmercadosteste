@@ -141,7 +141,6 @@ def extrair_descricao_remota_nagumo(url_produto):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
-        # Reutiliza os cookies fixados da sessão global para manter a consistência com a loja selecionada
         cookies_fixos = {
             "dw_store": ID_LOJA,
             "hasSelectedStore": ID_LOJA,
@@ -181,13 +180,11 @@ def calcular_preco_unitario_nagumo(preco_valor, nome, descricao, medida_venda, i
 
         rolos, metros = extrair_rolos_metros(nome_lower)
         
-        # Condição de Contingência: Se for papel higiênico e NÃO tiver metros no título, acessa o link individual
         if not metros and link_produto != '#':
             descricao_html = extrair_descricao_remota_nagumo(link_produto)
-            if descricao_html:
+            if description_html:
                 descricao = (descricao or "") + " " + descricao_html
 
-        # Consulta a descrição acumulada se faltar alguma informação
         if (not rolos or not metros) and descricao:
             desc_lower = descricao.lower()
             r_desc, m_desc = extrair_rolos_metros(desc_lower)
@@ -229,7 +226,6 @@ def extrair_valor_unitario(label):
     return float(match.group(1).replace(',', '.')) if match else float('inf')
 
 def inicializar_sessao_nagumo():
-    """Garante que a sessão inicial no HTML público exista antes das requisições AJAX paralelas"""
     url_inicializacao = f"https://www.nagumo.com.br/busca?q=Cenoura&idLoja={ID_LOJA}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -241,7 +237,6 @@ def inicializar_sessao_nagumo():
         "meunagumo_store": ID_LOJA
     }
     try:
-        # Faz uma chamada simples para gerar e estabelecer os cookies de sessão internos (dwsid, sid, etc.)
         NAGUMO_SESSION.get(url_inicializacao, headers=headers, cookies=cookies_fixos, timeout=8)
     except: pass
 
@@ -259,7 +254,6 @@ def fetch_api_nagumo(url):
         "Referer": "https://www.nagumo.com.br/"
     }
     try:
-        # Usamos o objeto de sessão persistente para herdar os tokens gerados
         r = NAGUMO_SESSION.get(url, headers=headers, cookies=cookies_fixos, timeout=10)
         if r.status_code == 200:
             return r.json()
@@ -271,8 +265,6 @@ def buscar_nagumo_turbo_total(termo_usuario):
     if not palavras_chave: return []
     
     termo_api = palavras_chave[0]
-    
-    # Executa a simulação do acesso inicial para forçar a criação da sessão correta no servidor deles
     inicializar_sessao_nagumo()
     
     url_inicial = f"https://www.nagumo.com.br/on/demandware.store/Sites-Nagumo-Site/pt_BR/Search-UpdateGrid?q={termo_api}&start=00&sz={ITENS_POR_PAGINA}&idLoja={ID_LOJA}"
@@ -343,7 +335,6 @@ def buscar_nagumo_turbo_total(termo_usuario):
                 'link': link_item
             })
             
-    # Processamento em lote das labels de cálculo para dar suporte às chamadas remotas concorrentes
     final_list = []
     with ThreadPoolExecutor(max_workers=10) as label_executor:
         futures = {
@@ -448,7 +439,6 @@ if termo:
                     val_unidade, _ = calcular_preco_unidade(desc, preco_final)
 
                     # Fallback: extrai preço unitário do preco_str quando a descrição não tem o peso
-                    # Ex: "R$ 1,80/0,2kg" → 1.80 / 0.2 = 9.00/kg (preço correto para ordenação)
                     if val_unidade is None:
                         match_ps = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", p['preco_str'].lower())
                         if match_ps:
@@ -460,8 +450,18 @@ if termo:
                                 if q > 0: val_unidade = preco_final / q
                             except: pass
 
+                    # CÁLCULO ESPECÍFICO DO PREÇO UNITÁRIO DO OVO PARA A ORDENAÇÃO
+                    val_ovo = None
+                    if 'ovo' in remover_acentos(desc).lower():
+                        match_ovo = re.search(r'(\d+)\s*(unidades|un|ovos|c/|com)', desc.lower())
+                        if match_ovo and int(match_ovo.group(1)) > 0:
+                            val_ovo = preco_final / int(match_ovo.group(1))
+                        elif re.search(r'1\s*d[uú]zia', desc.lower()):
+                            val_ovo = preco_final / 12
+
                     if 'papel toalha' in remover_acentos(termo).lower() and val_folha: p['sort_val'] = val_folha
                     elif 'papel higienico' in remover_acentos(termo).lower() and val_metro: p['sort_val'] = val_metro
+                    elif val_ovo is not None: p['sort_val'] = val_ovo
                     else: p['sort_val'] = val_unidade or preco_final
                     
                     shibata_final.append(p)
@@ -597,8 +597,6 @@ if termo:
             """, unsafe_allow_html=True)
 
     # --- FORÇAR ROLAGEM PARA O TOPO ---
-    # O timestamp torna o HTML único a cada busca, forçando o Streamlit a recriar
-    # o iframe e re-executar o script (sem isso, o conteúdo idêntico é cacheado).
     components.html(
         f"""
         <script>
