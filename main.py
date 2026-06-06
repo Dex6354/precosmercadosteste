@@ -182,7 +182,7 @@ def calcular_preco_unitario_nagumo(preco_valor, nome, descricao, medida_venda, i
         
         if not metros and link_produto != '#':
             descricao_html = extrair_descricao_remota_nagumo(link_produto)
-            if description_html:
+            if descricao_html:
                 descricao = (descricao or "") + " " + descricao_html
 
         if (not rolos or not metros) and descricao:
@@ -613,4 +613,4 @@ if termo:
         """,
         height=0,
         width=0,
-        )
+    )
