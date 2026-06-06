@@ -447,8 +447,8 @@ if termo:
                     _, val_folha = calcular_preco_papel_toalha(desc, preco_final)
                     val_unidade, _ = calcular_preco_unidade(desc, preco_final)
 
-                    # Fallback: extrai preço unitário do preco_str quando a descrição não tem o peso
-                    # Ex: "R$ 1,80/0,2kg" → 1.80 / 0.2 = 9.00/kg (preço correto para ordenação)
+                    # Fallback 1: extrai preco unitario do preco_str quando a descricao nao tem o peso
+                    # Ex: "R$ 1,80/0,2kg" -> 1.80 / 0.2 = 9.00/kg (preco correto para ordenacao)
                     if val_unidade is None:
                         match_ps = re.search(r"/\s*([\d.,]+)\s*(kg|g|l|ml)", p['preco_str'].lower())
                         if match_ps:
@@ -460,9 +460,22 @@ if termo:
                                 if q > 0: val_unidade = preco_final / q
                             except: pass
 
-                    # Seleciona o menor valor calculado disponível, independente da categoria (kg, L, m, folha...)
-                    # Garante que papel alumínio a R$0,998/m fique acima de guardanapo a R$1,79/un
-                    candidatos = [v for v in [val_metro, val_folha, val_unidade] if v is not None and v > 0]
+                    # Fallback 2: itens contaveis na descricao (ovos, unidades, duzia...)
+                    # Ex: "30 Unidades" -> 9,99 / 30 = 0,333/unidade
+                    val_item = None
+                    if re.search(r'1\s*d[uú]zia', desc.lower()):
+                        val_item = preco_final / 12
+                    else:
+                        match_contavel = re.search(r'(\d+)\s*(unidades?|ovos?)\b', desc.lower())
+                        if match_contavel:
+                            try:
+                                qtd = int(match_contavel.group(1))
+                                if qtd > 1:
+                                    val_item = preco_final / qtd
+                            except: pass
+
+                    # Seleciona o menor valor calculado disponivel, independente da categoria (kg, L, m, folha, unidade...)
+                    candidatos = [v for v in [val_metro, val_folha, val_unidade, val_item] if v is not None and v > 0]
                     p['sort_val'] = min(candidatos) if candidatos else preco_final
                     
                     shibata_final.append(p)
