@@ -584,6 +584,8 @@ st.markdown("""
         [data-baseweb="tab-highlight"] {
             background-color: #FFD600 !important;
             height: 3px !important;
+            transition: none !important;
+            animation: none !important;
         }
 
         /* Conteúdo de cada aba — rola independentemente */
