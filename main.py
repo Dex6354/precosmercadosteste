@@ -202,7 +202,7 @@ def calcular_preco_unitario_nagumo(preco_valor, nome, descricao, medida_venda, i
     if match_un:
         try:
             qtd = float(match_un.group(1))
-            if qtd > 0: return f"R$ {preco_valor / qtd:.2f}/un".replace('.', ',')
+            if qtd > 1: return f"R$ {preco_valor / qtd:.2f}/un".replace('.', ',')
         except: pass
 
     if medida_venda == "unity": 
@@ -339,13 +339,14 @@ def buscar_pagina_shibata(termo, pagina):
     except: pass
     return []
 
-def renderizar_lista_produtos(produtos):
+def renderizar_lista_produtos(produtos, id_aba):
     if not produtos:
         st.warning("Nenhum produto encontrado para esta seleção.")
         return
 
     st.markdown(f"<small>🔎 {len(produtos)} produto(s) exibido(s).</small>", unsafe_allow_html=True)
-    st.markdown("<div class='lista-unica'>", unsafe_allow_html=True)
+    # Cada aba ganha um container wrapper com id único e classe para scroll individual
+    st.markdown(f"<div id='scroll-{id_aba}' class='lista-unica'>", unsafe_allow_html=True)
     for item in produtos:
         titulo = item['productName']
         img = item['img_url']
@@ -443,19 +444,40 @@ def renderizar_lista_produtos(produtos):
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="centered")
 
+# CSS para fixar o cabeçalho e travar a rolagem geral da viewport principal
 st.markdown("""
     <style>
-        .block-container { padding-top: 0rem; }
+        html, body, [data-testid="stAppViewContainer"] {
+            overflow: hidden !important;
+            height: 100vh !important;
+        }
+        .block-container {
+            padding-top: 0.5rem !important;
+            padding-bottom: 0rem !important;
+            height: 100vh !important;
+            display: flex;
+            flex-direction: column;
+        }
         footer {visibility: hidden;}
         #MainMenu {visibility: hidden;}
         div, span, strong, small { font-size: 0.75rem !important; }
         img { max-width: 100px; height: auto; }
+        
         .product-container { display: flex; align-items: center; gap: 10px; }
         .product-image { min-width: 80px; max-width: 80px; flex-shrink: 0; position: relative; }
         .product-info { flex: 1 1 auto; min-width: 0; word-break: break-word; overflow-wrap: break-word; }
         hr.product-separator { border: none; border-top: 1px solid #eee; margin: 10px 0; }
         .info-cinza { color: gray; font-size: 0.8rem; }
-        .lista-unica { overflow-y: auto; max-height: 90vh; padding: 10px; border: 1px solid #f0f2f6; border-radius: 8px; scrollbar-width: thin; }
+        
+        /* A lista consome o espaço restante e rola independente */
+        .lista-unica { 
+            overflow-y: auto !important; 
+            height: calc(100vh - 170px) !important; 
+            padding: 10px; 
+            border: 1px solid #f0f2f6; 
+            border-radius: 8px; 
+            scrollbar-width: thin; 
+        }
         header[data-testid="stHeader"] { display: none; }
     </style>
 """, unsafe_allow_html=True)
@@ -541,34 +563,50 @@ if termo:
         nagumo_final = buscar_nagumo_turbo_total(termo)
         lista_unificada.extend(nagumo_final)
 
-        # --- ORDENAÇÃO GERAL PELO MENOR PREÇO UNITÁRIO/MÉTRICO ---
+        # --- ORDENAÇÃO GERAL PELO MENOR PREÇO UNITÁRIO ---
         lista_unificada = sorted(lista_unificada, key=lambda x: x['sort_val'] if x['sort_val'] is not None else 999)
 
-    # --- CRIAÇÃO DAS ABAS DE NAVEGAÇÃO ---
+    # --- CABEÇALHO FIXO COM ABAS DE NAVEGAÇÃO ---
     tab_todos, tab_nagumo, tab_shibata = st.tabs(["Todos", "Só Nagumo", "Só Shibata"])
     
     with tab_todos:
-        renderizar_lista_produtos(lista_unificada)
+        renderizar_lista_produtos(lista_unificada, "todos")
         
     with tab_nagumo:
         lista_nagumo = [item for item in lista_unificada if item['mercado'] == 'Nagumo']
-        renderizar_lista_produtos(lista_nagumo)
+        renderizar_lista_produtos(lista_nagumo, "nagumo")
         
     with tab_shibata:
         lista_shibata = [item for item in lista_unificada if item['mercado'] == 'Shibata']
-        renderizar_lista_produtos(lista_shibata)
+        renderizar_lista_produtos(lista_shibata, "shibata")
 
+    # Injeção JavaScript: Monitora mudanças e persiste scroll para cada ID único
     components.html(
         f"""
         <script>
             /* {termo} | {time.time()} */
-            function scrollColunas() {{
-                const col = window.parent.document.querySelector('.lista-unica');
-                if(col) col.scrollTop = 0;
-            }}
-            scrollColunas();
-            setTimeout(scrollColunas, 150);
-            setTimeout(scrollColunas, 400);
+            (function() {{
+                const pDoc = window.parent.document;
+                
+                // Grava a posição de rolagem individual de cada contêiner ativo ao rolar
+                pDoc.addEventListener('scroll', function(e) {{
+                    if (e.target && e.target.classList && e.target.classList.contains('lista-unica')) {{
+                        const id = e.target.id;
+                        sessionStorage.setItem('scroll_pos_' + id, e.target.scrollTop);
+                    }}
+                }}, true);
+
+                // Recupera as posições salvas sempre que o Streamlit re-renderizar
+                setTimeout(function() {{
+                    ['scroll-todos', 'scroll-nagumo', 'scroll-shibata'].forEach(id => {{
+                        const el = pDoc.getElementById(id);
+                        if (el) {{
+                            const saved = sessionStorage.getItem('scroll_pos_' + id);
+                            if (saved) el.scrollTop = parseInt(saved, 10);
+                        }}
+                    }});
+                }}, 50);
+            }})();
         </script>
         """,
         height=0, width=0,
