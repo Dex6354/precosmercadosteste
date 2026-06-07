@@ -481,7 +481,7 @@ def render_lista(produtos):
     if not produtos:
         st.warning("Nenhum produto encontrado.")
         return
-    st.markdown(f"<small>🕵️ {len(produtos)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
+    st.markdown(f"<small>🔎 {len(produtos)} produto(s) encontrado(s).</small>", unsafe_allow_html=True)
     for p in produtos:
         if p['source'] == 'shibata':
             render_shibata_item(p)
