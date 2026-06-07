@@ -649,9 +649,9 @@ if termo:
 
     # --- ABAS ---
     tab_todos, tab_nagumo, tab_shibata = st.tabs([
-        f"🔍 Todos ({len(todos_produtos)})",
-        f"Nagumo ({len(nagumo_lista)})",
+        f"Todos ({len(todos_produtos)})",
         f"Shibata ({len(shibata_lista)})",
+        f"Nagumo ({len(nagumo_lista)})",
     ])
 
     with tab_todos:
