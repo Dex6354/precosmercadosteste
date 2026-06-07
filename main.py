@@ -551,8 +551,39 @@ st.markdown("""
             top: 0;
             z-index: 100;
             background: var(--background-color, #0e1117);
-            padding-bottom: 2px;
             flex-shrink: 0;
+            border-bottom: 2px solid #444 !important;
+            padding-bottom: 0 !important;
+            gap: 4px !important;
+        }
+
+        /* Todas as abas — aparência padrão (inativa) */
+        [data-baseweb="tab"] {
+            color: #888 !important;
+            font-weight: 500 !important;
+            font-size: 0.78rem !important;
+            padding: 6px 12px !important;
+            border-radius: 6px 6px 0 0 !important;
+            border: 1px solid transparent !important;
+            border-bottom: none !important;
+            background: transparent !important;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        /* Aba selecionada — amarelo, destaque total */
+        [aria-selected="true"][data-baseweb="tab"] {
+            color: #FFD600 !important;
+            font-weight: 800 !important;
+            background: rgba(255, 214, 0, 0.1) !important;
+            border: 1px solid #444 !important;
+            border-bottom: 3px solid #FFD600 !important;
+            margin-bottom: -2px !important;
+        }
+
+        /* Linha indicadora embaixo da aba ativa (override padrão Streamlit) */
+        [data-baseweb="tab-highlight"] {
+            background-color: #FFD600 !important;
+            height: 3px !important;
         }
 
         /* Conteúdo de cada aba — rola independentemente */
