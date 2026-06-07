@@ -648,7 +648,7 @@ if termo:
     shibata_lista = [p for p in todos_produtos if p['source'] == 'shibata']
 
     # --- ABAS ---
-    tab_todos, tab_nagumo, tab_shibata = st.tabs([
+    tab_todos, tab_shibata, tab_nagumo = st.tabs([
         f"Todos ({len(todos_produtos)})",
         f"Shibata ({len(shibata_lista)})",
         f"Nagumo ({len(nagumo_lista)})",
