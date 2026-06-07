@@ -24,6 +24,7 @@ LOGO_NAGUMO_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/logo-nag
 DEFAULT_IMAGE_URL = "https://rawcdn.githack.com/gymbr/precosmercados/main/sem-imagem.png"
 ID_LOJA = "22"
 ITENS_POR_PAGINA = 24
+FOOTER_HEIGHT = "56px"  # ← Ajuste aqui a altura do rodapé
 
 # Sessão global do requests para manter e validar os cookies do servidor
 NAGUMO_SESSION = requests.Session()
@@ -487,6 +488,12 @@ def render_lista(produtos):
             render_shibata_item(p)
         else:
             render_nagumo_item(p)
+    st.markdown(f"""
+        <div style="height:{FOOTER_HEIGHT}; display:flex; align-items:center; justify-content:center;
+                    border-top:1px solid #333; margin-top:6px; color:gray; font-size:0.7rem;">
+            🛒 Preços Mercados &nbsp;·&nbsp; Shibata &amp; Nagumo
+        </div>
+    """, unsafe_allow_html=True)
 
 # --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Preços Mercados", page_icon="🛒", layout="wide")
@@ -681,4 +688,4 @@ if termo:
         """,
         height=0,
         width=0,
-    )
+        )
